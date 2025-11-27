@@ -975,7 +975,7 @@ elif page == "🧪 Dimensionless Model":
     # Display static snapshots at initial, middle, and final times
     st.subheader("📊 Snapshots at Selected Times")
     # Show 5 evenly spaced time snapshots
-    num_snaps = 5
+    num_snaps = 10
     idxs = [int(i * (len(t_hist)-1) / (num_snaps-1)) for i in range(num_snaps)]
     labels = [f"Snapshot {i+1} (τ={t_hist[idx]:.4f})" for i, idx in enumerate(idxs)]
     for i, idx in enumerate(idxs):
