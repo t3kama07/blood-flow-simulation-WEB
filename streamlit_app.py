@@ -862,9 +862,11 @@ elif page == "🧪 Dimensionless Model":
             q[-1] = q[-2]
         
         def mac_cormack_dim(a, q):
+            """MacCormack predictor-corrector scheme."""
             a_p = a.copy()
             q_p = q.copy()
             
+            # Predictor (forward difference)
             for i in range(1, N + 1):
                 a_p[i] = a[i] - (dt/dx)*(q[i+1] - q[i])
                 q_p[i] = q[i] - (dt/dx)*(a[i+1] - a[i]) - dt*K3*q[i]
@@ -874,6 +876,7 @@ elif page == "🧪 Dimensionless Model":
             a_new = a.copy()
             q_new = q.copy()
             
+            # Corrector (backward difference + averaging)
             for i in range(1, N + 1):
                 a_new[i] = 0.5*(a[i] + a_p[i] - (dt/dx)*(q_p[i] - q_p[i-1]))
                 q_new[i] = 0.5*(q[i] + q_p[i]
@@ -900,8 +903,8 @@ elif page == "🧪 Dimensionless Model":
                 q_hist.append(q[1:-1].copy())
                 t_hist.append(tau)
             
-            a, q = mac_cormack_dim(a, q)
             apply_bc_dim(a, q)
+            a, q = mac_cormack_dim(a, q)
             tau += dt
         
         progress_bar.progress(1.0)
@@ -919,42 +922,62 @@ elif page == "🧪 Dimensionless Model":
         with col2:
             st.metric("Grid Points", N)
         
-        fig, axes = plt.subplots(2, 1, figsize=(12, 10))
+        st.subheader("🎚️ Interactive Time Slider - MacCormack Scheme")
+        st.markdown("Drag the slider below to see how area (a) and flow (q) evolve over time.")
         
-        im0 = axes[0].contourf(x, t_hist, a_hist, levels=15, cmap='RdYlBu_r')
-        axes[0].set_ylabel('Time τ', fontweight='bold')
-        axes[0].set_title('Area (a) Spatio-Temporal Evolution - Dimensionless', fontweight='bold')
-        plt.colorbar(im0, ax=axes[0], label='a')
+        # Interactive slider for time selection
+        time_idx = st.slider("Time Index", 0, len(t_hist)-1, 0, key="dim_time_slider")
         
-        im1 = axes[1].contourf(x, t_hist, q_hist, levels=15, cmap='viridis')
-        axes[1].set_xlabel('Position x', fontweight='bold')
-        axes[1].set_ylabel('Time τ', fontweight='bold')
-        axes[1].set_title('Flow (q) Spatio-Temporal Evolution - Dimensionless', fontweight='bold')
-        plt.colorbar(im1, ax=axes[1], label='q')
+        # Create interactive plot
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        # Plot both q and a at selected time
+        ax.plot(x, q_hist[time_idx], color='tab:blue', label="q(x, τ)", linewidth=2.5, marker='o', markersize=3, alpha=0.8)
+        ax.plot(x, a_hist[time_idx], color='tab:orange', label="a(x, τ)", linewidth=2.5, marker='s', markersize=3, alpha=0.8)
+        
+        # Fixed y-limits based on all data to prevent cropping
+        ymin = min(a_hist.min(), q_hist.min())
+        ymax = max(a_hist.max(), q_hist.max())
+        padding = 0.2 * (ymax - ymin) if (ymax - ymin) > 0 else 0.1
+        ax.set_ylim(ymin - padding, ymax + padding)
+        
+        ax.set_xlabel("x (dimensionless)", fontsize=12, fontweight='bold')
+        ax.set_ylabel("Dimensionless Value", fontsize=12, fontweight='bold')
+        ax.set_title(f"MacCormack Scheme: τ = {t_hist[time_idx]:.5f}", fontsize=13, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=11, loc='best')
         
         plt.tight_layout()
         st.pyplot(fig)
         
-        st.subheader("📊 Field Profiles at Different Times")
+        # Statistics at selected time
+        st.subheader("📊 Values at Selected Time")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Time τ", f"{t_hist[time_idx]:.5f}")
+            st.metric("Max a", f"{a_hist[time_idx].max():.6f}")
+        with col2:
+            st.metric("Min a", f"{a_hist[time_idx].min():.6f}")
+            st.metric("Max q", f"{q_hist[time_idx].max():.6f}")
+        with col3:
+            st.metric("Min q", f"{q_hist[time_idx].min():.6f}")
+            st.metric("Mean a", f"{a_hist[time_idx].mean():.6f}")
         
-        fig2, axes2 = plt.subplots(1, 2, figsize=(14, 5))
+        # Spatio-temporal contour plots
+        st.subheader("📈 Full Spatio-Temporal Evolution")
         
-        times_to_plot = [0, len(t_hist)//2, -1]
-        for idx in times_to_plot:
-            axes2[0].plot(x, a_hist[idx], label=f'τ={t_hist[idx]:.2f}', linewidth=2, alpha=0.7)
-        axes2[0].set_xlabel('Position x', fontweight='bold')
-        axes2[0].set_ylabel('Area (a)', fontweight='bold')
-        axes2[0].set_title('Area Profiles', fontweight='bold')
-        axes2[0].legend()
-        axes2[0].grid(True, alpha=0.3)
+        fig2, axes2 = plt.subplots(2, 1, figsize=(12, 10))
         
-        for idx in times_to_plot:
-            axes2[1].plot(x, q_hist[idx], label=f'τ={t_hist[idx]:.2f}', linewidth=2, alpha=0.7)
-        axes2[1].set_xlabel('Position x', fontweight='bold')
-        axes2[1].set_ylabel('Flow (q)', fontweight='bold')
-        axes2[1].set_title('Flow Profiles', fontweight='bold')
-        axes2[1].legend()
-        axes2[1].grid(True, alpha=0.3)
+        im0 = axes2[0].contourf(x, t_hist, a_hist, levels=20, cmap='RdYlBu_r')
+        axes2[0].set_ylabel('Time τ', fontweight='bold', fontsize=11)
+        axes2[0].set_title('Area (a) Spatio-Temporal Evolution - Dimensionless (MacCormack)', fontweight='bold', fontsize=12)
+        cbar0 = plt.colorbar(im0, ax=axes2[0], label='a')
+        
+        im1 = axes2[1].contourf(x, t_hist, q_hist, levels=20, cmap='viridis')
+        axes2[1].set_xlabel('Position x', fontweight='bold', fontsize=11)
+        axes2[1].set_ylabel('Time τ', fontweight='bold', fontsize=11)
+        axes2[1].set_title('Flow (q) Spatio-Temporal Evolution - Dimensionless (MacCormack)', fontweight='bold', fontsize=12)
+        cbar1 = plt.colorbar(im1, ax=axes2[1], label='q')
         
         plt.tight_layout()
         st.pyplot(fig2)
