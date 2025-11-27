@@ -462,7 +462,7 @@ elif page == "🌊 Simulation Z (Space-based)":
         plt.tight_layout()
         st.pyplot(fig2)
     else:
-        # Parameters are now static; no sidebar adjustment needed.
+        pass
 
 # ============================================================
 # HEALTHY ARTERY MODEL
