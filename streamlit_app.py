@@ -974,8 +974,10 @@ elif page == "🧪 Dimensionless Model":
     
     # Display static snapshots at initial, middle, and final times
     st.subheader("📊 Snapshots at Selected Times")
-    idxs = [0, len(t_hist)//2, -1]
-    labels = [f"Initial (τ={t_hist[0]:.4f})", f"Middle (τ={t_hist[len(t_hist)//2]:.4f})", f"Final (τ={t_hist[-1]:.4f})"]
+    # Show 5 evenly spaced time snapshots
+    num_snaps = 5
+    idxs = [int(i * (len(t_hist)-1) / (num_snaps-1)) for i in range(num_snaps)]
+    labels = [f"Snapshot {i+1} (τ={t_hist[idx]:.4f})" for i, idx in enumerate(idxs)]
     for i, idx in enumerate(idxs):
         fig, ax = plt.subplots(figsize=(10, 4))
         ax.plot(x, q_hist[idx], color='tab:blue', label="q(x, τ)", linewidth=2.5)
