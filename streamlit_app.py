@@ -287,78 +287,528 @@ elif page == "🫀 Simulation T (Time-based)":
 # ============================================================
 elif page == "🌊 Simulation Z (Space-based)":
     st.title("🌊 Simulation Z: Space-Based Analysis")
-    st.warning("⚠️ This simulation is optimized for local execution with matplotlib interactive slider features.")
-    st.info("For cloud-based deployment, use **Simulation T** instead.")
-    st.markdown("""
-    To run this locally, execute:
-    ```bash
-    python simulation_z.py
-    ```
-    This will show an interactive plot with a time slider to visualize spatial wave propagation.
-    """)
+    st.markdown("Shows spatial distribution of pressure, flow, and area along the artery at different time snapshots.")
+    
+    with st.sidebar.expander("⚙️ Parameters"):
+        L = st.slider("Artery Length (m)", 0.05, 1.0, 0.15, 0.01, key="z_length")
+        D_ref = st.slider("Reference Diameter (mm)", 1.0, 20.0, 3.0, 0.5, key="z_diameter") / 1000.0
+        E = st.slider("Young's Modulus (Pa)", 0.5e6, 5.0e6, 1.5e6, 0.1e6, key="z_modulus")
+        run_button = st.button("🚀 Run Simulation Z", key="run_z", use_container_width=True)
+    
+    rho = 1060.0
+    mu = 3.5e-3
+    r_ref = D_ref / 2.0
+    h = 1.0e-4
+    A_ref = math.pi * r_ref**2
+    alpha = E * h / (2.0 * math.pi * r_ref**3)
+    c = math.sqrt(alpha * A_ref / rho)
+    
+    dx = 1.0e-3
+    dt = 1.0e-5
+    T_final = 1.0
+    Nz = int(L / dx)
+    Nzp1 = Nz + 1
+    Nt = int(T_final / dt)
+    z = np.linspace(0.0, L, Nzp1)
+    CFL = c * dt / dx
+    
+    def blackman_harris(x):
+        if x < 0.0 or x > 1.0:
+            return 0.0
+        a0, a1, a2, a3 = 0.35875, 0.48829, 0.14128, 0.01168
+        return a0 - a1*np.cos(2*np.pi*x) + a2*np.cos(4*np.pi*x) - a3*np.cos(6*np.pi*x)
+
+    def p_inlet(t):
+        LD, LP, LT = 0.60, 0.55, 0.55
+        tP, tD, tT = 0.38, 0.05, 0.20
+        betaP, betaD, betaT = 1.0, 0.4, 0.3
+        A_total_mmHg = 50.0
+        mmHg_to_Pa = 133.322
+        A_total = A_total_mmHg * mmHg_to_Pa
+        
+        xi_P = (t - tP) / LP
+        xi_T = (t - tT) / LT
+        xi_D = (t - tD) / LD
+        wP = blackman_harris(xi_P)
+        wT = blackman_harris(xi_T)
+        wD = blackman_harris(xi_D)
+        return A_total * (betaP*wP + betaT*wT + betaD*wD)
+
+    def A_inlet(t):
+        p = p_inlet(t)
+        return A_ref + p / alpha
+    
+    if run_button:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        d = 8.0 * np.pi * mu / (rho * A_ref)
+        
+        A = np.full(Nzp1, A_ref)
+        Q = np.zeros(Nzp1)
+        
+        snapshots_A, snapshots_Q, snapshots_P, times = [], [], [], []
+        save_every = 2000
+        
+        for n in range(Nt):
+            t = n * dt
+            
+            if n % 10000 == 0:
+                progress_bar.progress(min(n / Nt, 1.0))
+                status_text.text(f"⏳ Processing... {n/Nt*100:.1f}%")
+            
+            A[0] = A_inlet(t)
+            Q[0] = Q[1]
+            A[-1] = A[-2]
+            Q[-1] = Q[-2]
+            
+            A_star = A.copy()
+            Q_star = Q.copy()
+            for i in range(Nz):
+                A_star[i] = A[i] - (dt/dx) * (Q[i+1] - Q[i])
+                Q_star[i] = Q[i] - (c**2 * dt/dx) * (A[i+1] - A[i]) - d * dt * Q[i]
+            
+            A_star[0] = A_inlet(t + dt)
+            Q_star[0] = Q_star[1]
+            A_star[-1] = A_star[-2]
+            Q_star[-1] = Q_star[-2]
+            
+            A_new = A.copy()
+            Q_new = Q.copy()
+            for i in range(1, Nzp1):
+                A_new[i] = 0.5 * (A[i] + A_star[i] - (dt/dx)*(Q_star[i] - Q_star[i-1]))
+                Q_new[i] = 0.5 * (Q[i] + Q_star[i]
+                                  - (c**2 * dt/dx)*(A_star[i] - A_star[i-1])
+                                  - d*dt*Q_star[i])
+            
+            A[:] = A_new
+            Q[:] = Q_new
+            A[0] = A_inlet(t + dt)
+            Q[0] = Q[1]
+            A[-1] = A[-2]
+            Q[-1] = Q[-2]
+            
+            if n % save_every == 0:
+                p = alpha * (A - A_ref)
+                snapshots_A.append(A.copy())
+                snapshots_Q.append(Q.copy())
+                snapshots_P.append(p.copy())
+                times.append(t)
+        
+        progress_bar.progress(1.0)
+        status_text.text("✅ Simulation complete!")
+        
+        snapshots_A = np.array(snapshots_A)
+        snapshots_Q = np.array(snapshots_Q)
+        snapshots_P = np.array(snapshots_P)
+        times = np.array(times)
+        
+        st.success("Simulation completed successfully!")
+        
+        z_mm = z * 1000
+        P_mmHg = snapshots_P / 133.322
+        Q_mm3s = snapshots_Q * 1e6
+        A_mm2 = snapshots_A * 1e6
+        
+        selected_time_idx = st.slider("Select time snapshot", 0, len(times)-1, 0, key="z_slider")
+        
+        fig, axes = plt.subplots(3, 1, figsize=(12, 10))
+        
+        axes[0].plot(z_mm, P_mmHg[selected_time_idx], 'r-', linewidth=2, marker='o', markersize=4)
+        axes[0].set_ylabel('Pressure [mmHg]', fontweight='bold')
+        axes[0].set_title(f'Spatial Distribution at t={times[selected_time_idx]:.4f}s', fontweight='bold')
+        axes[0].grid(True, alpha=0.3)
+        
+        axes[1].plot(z_mm, Q_mm3s[selected_time_idx], 'b-', linewidth=2, marker='s', markersize=4)
+        axes[1].set_ylabel('Flow [mm³/s]', fontweight='bold')
+        axes[1].grid(True, alpha=0.3)
+        
+        axes[2].plot(z_mm, A_mm2[selected_time_idx], 'g-', linewidth=2, marker='^', markersize=4)
+        axes[2].set_ylabel('Area [mm²]', fontweight='bold')
+        axes[2].set_xlabel('Position along artery z [mm]', fontweight='bold')
+        axes[2].grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+        
+        st.subheader("📊 Wave Propagation Over Time")
+        
+        fig2, axes2 = plt.subplots(1, 3, figsize=(15, 4))
+        
+        im0 = axes2[0].contourf(z_mm, times, P_mmHg, levels=15, cmap='RdYlBu_r')
+        axes2[0].set_xlabel('Position z [mm]')
+        axes2[0].set_ylabel('Time [s]')
+        axes2[0].set_title('Pressure Wave Propagation')
+        plt.colorbar(im0, ax=axes2[0], label='Pressure [mmHg]')
+        
+        im1 = axes2[1].contourf(z_mm, times, Q_mm3s, levels=15, cmap='viridis')
+        axes2[1].set_xlabel('Position z [mm]')
+        axes2[1].set_ylabel('Time [s]')
+        axes2[1].set_title('Flow Wave Propagation')
+        plt.colorbar(im1, ax=axes2[1], label='Flow [mm³/s]')
+        
+        im2 = axes2[2].contourf(z_mm, times, A_mm2, levels=15, cmap='plasma')
+        axes2[2].set_xlabel('Position z [mm]')
+        axes2[2].set_ylabel('Time [s]')
+        axes2[2].set_title('Area Wave Propagation')
+        plt.colorbar(im2, ax=axes2[2], label='Area [mm²]')
+        
+        plt.tight_layout()
+        st.pyplot(fig2)
+    else:
+        st.info("👈 **Adjust parameters and click 'Run Simulation Z' to begin**")
 
 # ============================================================
 # HEALTHY ARTERY MODEL
 # ============================================================
 elif page == "💚 Healthy Artery Model":
-    st.title("💚 Healthy Artery Model with Windkessel Outlet")
-    st.warning("⚠️ This model is optimized for local execution with advanced Windkessel outlet conditions.")
-    st.info("For cloud-based deployment, use **Simulation T** instead.")
-    st.markdown("""
-    To run this locally, execute:
-    ```bash
-    python healthy_wk/healthy_wk.py
-    ```
-    Features:
-    - 3-element Windkessel outlet boundary conditions
-    - Variable wall thickness
-    - Realistic downstream compliance effects
-    """)
+    st.title("💚 Healthy Artery Model")
+    st.markdown("Advanced model with improved wall properties and compliance.")
+    
+    with st.sidebar.expander("⚙️ Parameters"):
+        L = st.slider("Artery Length (m)", 0.05, 1.0, 0.15, 0.01, key="h_length")
+        D_ref = st.slider("Reference Diameter (mm)", 1.0, 20.0, 3.0, 0.5, key="h_diameter") / 1000.0
+        h_wall = st.slider("Wall Thickness (mm)", 0.05, 1.0, 0.3, 0.05, key="h_thickness") / 1000.0
+        E = st.slider("Young's Modulus (Pa)", 0.5e6, 5.0e6, 1.5e6, 0.1e6, key="h_modulus")
+        run_button = st.button("🚀 Run Healthy Model", key="run_healthy", use_container_width=True)
+    
+    rho = 1060.0
+    mu = 3.5e-3
+    r_ref = D_ref / 2.0
+    A_ref = np.pi * r_ref**2
+    alpha = E * h_wall / (2.0 * np.pi * r_ref**3)
+    c0 = np.sqrt(alpha * A_ref / rho)
+    
+    dx = 1.0e-3
+    dt = 1.0e-5
+    T_final = 1.0
+    Nz = int(L / dx)
+    Nzp1 = Nz + 1
+    Nt = int(T_final / dt)
+    z = np.linspace(0.0, L, Nzp1)
+    delta = 8.0 * np.pi * mu / (rho * A_ref)
+    
+    def blackman_harris_h(x):
+        if x < 0.0 or x > 1.0:
+            return 0.0
+        a0, a1, a2, a3 = 0.35875, 0.48829, 0.14128, 0.01168
+        return a0 - a1*np.cos(2*np.pi*x) + a2*np.cos(4*np.pi*x) - a3*np.cos(6*np.pi*x)
+
+    def p_inlet_h(t):
+        LD, LP, LT = 0.60, 0.55, 0.55
+        tP, tD, tT = 0.38, 0.05, 0.20
+        betaP, betaD, betaT = 1.0, 0.4, 0.3
+        mmHg_to_Pa = 133.322
+        A_total = 50.0 * mmHg_to_Pa
+        
+        xi_P = (t - tP) / LP
+        xi_T = (t - tT) / LT
+        xi_D = (t - tD) / LD
+        wP = blackman_harris_h(xi_P)
+        wT = blackman_harris_h(xi_T)
+        wD = blackman_harris_h(xi_D)
+        return A_total * (betaP*wP + betaT*wT + betaD*wD)
+
+    def A_inlet_h(t):
+        p = p_inlet_h(t)
+        return A_ref + p / alpha
+    
+    if run_button:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        A = np.full(Nzp1, A_ref)
+        Q = np.zeros(Nzp1)
+        
+        time_store = []
+        p_store_h = []
+        Q_store_h = []
+        A_store_h = []
+        
+        for n in range(Nt):
+            t = n * dt
+            
+            if n % 10000 == 0:
+                progress_bar.progress(min(n / Nt, 1.0))
+                status_text.text(f"⏳ Processing... {n/Nt*100:.1f}%")
+            
+            A[0] = A_inlet_h(t)
+            Q[0] = Q[1]
+            A[-1] = A[-2]
+            Q[-1] = Q[-2]
+            
+            A_star = A.copy()
+            Q_star = Q.copy()
+            for i in range(Nz):
+                A_star[i] = A[i] - (dt/dx) * (Q[i+1] - Q[i])
+                Q_star[i] = Q[i] - (c0**2 * dt/dx) * (A[i+1] - A[i]) - delta * dt * Q[i]
+            
+            A_star[0] = A_inlet_h(t + dt)
+            Q_star[0] = Q_star[1]
+            A_star[-1] = A_star[-2]
+            Q_star[-1] = Q_star[-2]
+            
+            A_new = A.copy()
+            Q_new = Q.copy()
+            for i in range(1, Nzp1):
+                A_new[i] = 0.5 * (A[i] + A_star[i] - (dt/dx)*(Q_star[i] - Q_star[i-1]))
+                Q_new[i] = 0.5 * (Q[i] + Q_star[i]
+                                  - (c0**2 * dt/dx)*(A_star[i] - A_star[i-1])
+                                  - delta*dt*Q_star[i])
+            
+            A[:] = A_new
+            Q[:] = Q_new
+            A[0] = A_inlet_h(t + dt)
+            Q[0] = Q[1]
+            A[-1] = A[-2]
+            Q[-1] = Q[-2]
+            
+            if n % 1000 == 0:
+                p = alpha * (A - A_ref)
+                time_store.append(t)
+                p_store_h.append(p.copy())
+                Q_store_h.append(Q.copy())
+                A_store_h.append(A.copy())
+        
+        progress_bar.progress(1.0)
+        status_text.text("✅ Simulation complete!")
+        
+        st.success("Healthy model simulation completed!")
+        
+        time_store = np.array(time_store)
+        p_store_h = np.array(p_store_h)
+        Q_store_h = np.array(Q_store_h)
+        A_store_h = np.array(A_store_h)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Wall Thickness", f"{h_wall*1000:.2f} mm")
+        with col2:
+            st.metric("Wave Speed", f"{c0:.3f} m/s")
+        
+        fig, axes = plt.subplots(3, 1, figsize=(12, 10))
+        
+        for i in [0, len(time_store)//2, -1]:
+            axes[0].plot(z*1000, p_store_h[i]/133.322, label=f't={time_store[i]:.3f}s', linewidth=2, alpha=0.7)
+        axes[0].set_ylabel('Pressure [mmHg]', fontweight='bold')
+        axes[0].set_title('Pressure Evolution', fontweight='bold')
+        axes[0].legend()
+        axes[0].grid(True, alpha=0.3)
+        
+        for i in [0, len(time_store)//2, -1]:
+            axes[1].plot(z*1000, Q_store_h[i]*1e6, label=f't={time_store[i]:.3f}s', linewidth=2, alpha=0.7)
+        axes[1].set_ylabel('Flow [mm³/s]', fontweight='bold')
+        axes[1].set_title('Flow Evolution', fontweight='bold')
+        axes[1].legend()
+        axes[1].grid(True, alpha=0.3)
+        
+        for i in [0, len(time_store)//2, -1]:
+            axes[2].plot(z*1000, A_store_h[i]*1e6, label=f't={time_store[i]:.3f}s', linewidth=2, alpha=0.7)
+        axes[2].set_ylabel('Area [mm²]', fontweight='bold')
+        axes[2].set_xlabel('Position z [mm]', fontweight='bold')
+        axes[2].set_title('Area Evolution', fontweight='bold')
+        axes[2].legend()
+        axes[2].grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+    else:
+        st.info("👈 **Adjust parameters and click 'Run Healthy Model' to begin**")
 
 # ============================================================
 # TEST SIMULATIONS
 # ============================================================
 elif page == "🧪 Test Simulations":
     st.title("🧪 Test Simulations & Validation Cases")
-    st.warning("⚠️ Test cases are optimized for local execution.")
     
     test_option = st.selectbox(
         "Select a test case:",
-        ["Test 1-T", "Test 1-Z", "Dimensionless Model"]
+        ["Test 1-T: Cosine Bump", "Test 1-Z: Spatial Test"]
     )
     
-    if test_option == "Test 1-T":
-        st.subheader("Test 1-T: Basic Validation Test")
-        st.markdown("""
-        A simple test case with smooth cosine bump initial conditions for validation.
+    if test_option == "Test 1-T: Cosine Bump":
+        st.subheader("Test 1-T: Smooth Cosine Bump Initial Conditions")
+        st.markdown("A simple validation test with analytical benchmark conditions.")
         
-        Run locally:
-        ```bash
-        python test_c.5/test1_t.py
-        ```
-        """)
+        with st.sidebar.expander("⚙️ Parameters"):
+            domain_length = st.slider("Domain Length (m)", 0.1, 2.0, 1.0, 0.1, key="test_length")
+            grid_points = st.slider("Grid Points", 100, 500, 400, 50, key="test_grid")
+            final_time = st.slider("Final Time (s)", 0.5, 5.0, 2.6, 0.5, key="test_time")
+            run_test = st.button("🚀 Run Test 1-T", key="run_test_t", use_container_width=True)
+        
+        if run_test:
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            L = domain_length
+            Nx = grid_points
+            dz = L / Nx
+            z = np.linspace(0, L, Nx+1)
+            
+            Tfinal = final_time
+            c = 1.0
+            CFL = 0.4
+            dt = CFL * dz / c
+            Nt = int(Tfinal / dt) + 1
+            dt = Tfinal / Nt
+            
+            epsilon = 0.02
+            
+            def bump(z_vals, center, eps, amp=1.0):
+                s = (z_vals - center) / eps
+                out = np.zeros_like(z_vals)
+                mask = np.abs(s) < 1
+                out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
+                return out
+            
+            Q = bump(z, 0.4, epsilon, amp=1.0)
+            A = bump(z, 0.7, epsilon, amp=1.0)
+            
+            track_positions = [0.25, 0.50, 0.75]
+            track_indices = [np.argmin(np.abs(z - xp)) for xp in track_positions]
+            
+            time_arr = []
+            Q_track = {xp: [] for xp in track_positions}
+            A_track = {xp: [] for xp in track_positions}
+            
+            t = 0.0
+            for n in range(Nt + 1):
+                if n % max(1, Nt//10) == 0:
+                    progress_bar.progress(min(n / (Nt+1), 1.0))
+                    status_text.text(f"⏳ Processing... {n/(Nt+1)*100:.1f}%")
+                
+                time_arr.append(t)
+                for xp, idx in zip(track_positions, track_indices):
+                    Q_track[xp].append(Q[idx])
+                    A_track[xp].append(A[idx])
+                
+                Q[0], Q[-1] = Q[1], Q[-2]
+                A[0], A[-1] = A[1], A[-2]
+                
+                Q_new = Q.copy()
+                A_new = A.copy()
+                for i in range(1, Nx):
+                    Q_new[i] = Q[i] - 0.5*CFL*(Q[i+1] - Q[i-1])
+                    A_new[i] = A[i] - 0.5*CFL*(A[i+1] - A[i-1])
+                
+                Q = Q_new
+                A = A_new
+                t += dt
+            
+            progress_bar.progress(1.0)
+            status_text.text("✅ Test complete!")
+            
+            st.success("Test 1-T completed successfully!")
+            
+            fig, axes = plt.subplots(2, 1, figsize=(12, 8))
+            
+            time_arr = np.array(time_arr)
+            for xp in track_positions:
+                axes[0].plot(time_arr, Q_track[xp], label=f'z={xp}m', linewidth=2, alpha=0.7)
+            axes[0].set_ylabel('Flow Q', fontweight='bold')
+            axes[0].set_title('Flow Evolution at Tracking Points', fontweight='bold')
+            axes[0].legend()
+            axes[0].grid(True, alpha=0.3)
+            
+            for xp in track_positions:
+                axes[1].plot(time_arr, A_track[xp], label=f'z={xp}m', linewidth=2, alpha=0.7)
+            axes[1].set_ylabel('Area A', fontweight='bold')
+            axes[1].set_xlabel('Time (s)', fontweight='bold')
+            axes[1].set_title('Area Evolution at Tracking Points', fontweight='bold')
+            axes[1].legend()
+            axes[1].grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+            st.subheader("📊 Test Statistics")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Grid Spacing (dz)", f"{dz:.6f} m")
+                st.metric("Time Step (dt)", f"{dt:.8f} s")
+            with col2:
+                st.metric("CFL Number", f"{CFL:.3f}")
+                st.metric("Total Time Steps", Nt)
     
-    elif test_option == "Test 1-Z":
-        st.subheader("Test 1-Z: Space-Based Test")
-        st.markdown("""
-        Space-focused test case for verification.
+    elif test_option == "Test 1-Z: Spatial Test":
+        st.subheader("Test 1-Z: Spatial Distribution Test")
+        st.markdown("Shows spatial evolution of test fields over multiple time snapshots.")
         
-        Run locally:
-        ```bash
-        python test_c.5/test1_z.py
-        ```
-        """)
-    
-    elif test_option == "Dimensionless Model":
-        st.subheader("Dimensionless Model Test")
-        st.markdown("""
-        Dimensionless formulation for theoretical studies.
+        with st.sidebar.expander("⚙️ Parameters"):
+            domain_length = st.slider("Domain Length (m)", 0.1, 2.0, 1.0, 0.1, key="testz_length")
+            run_test = st.button("🚀 Run Test 1-Z", key="run_test_z", use_container_width=True)
         
-        Run locally:
-        ```bash
-        python test_c.5/dimensionless/test-t_slider.py
-        ```
-        """)
+        if run_test:
+            st.info("Test 1-Z simulation running...")
+            
+            L = domain_length
+            Nx = 200
+            dz = L / Nx
+            z = np.linspace(0, L, Nx+1)
+            
+            c = 1.0
+            CFL = 0.4
+            dt = CFL * dz / c
+            Tfinal = 1.0
+            Nt = int(Tfinal / dt)
+            
+            epsilon = 0.05
+            
+            def bump(z_vals, center, eps, amp=1.0):
+                s = (z_vals - center) / eps
+                out = np.zeros_like(z_vals)
+                mask = np.abs(s) < 1
+                out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
+                return out
+            
+            Q = bump(z, 0.4, epsilon, amp=1.0)
+            A = bump(z, 0.7, epsilon, amp=1.0)
+            
+            snapshots_Q, snapshots_A, snap_times = [], [], []
+            save_freq = max(1, Nt // 10)
+            
+            t = 0.0
+            for n in range(Nt):
+                if n % save_freq == 0:
+                    snapshots_Q.append(Q.copy())
+                    snapshots_A.append(A.copy())
+                    snap_times.append(t)
+                
+                Q[0], Q[-1] = Q[1], Q[-2]
+                A[0], A[-1] = A[1], A[-2]
+                
+                Q_new = Q.copy()
+                A_new = A.copy()
+                for i in range(1, Nx):
+                    Q_new[i] = Q[i] - 0.5*CFL*(Q[i+1] - Q[i-1])
+                    A_new[i] = A[i] - 0.5*CFL*(A[i+1] - A[i-1])
+                
+                Q = Q_new
+                A = A_new
+                t += dt
+            
+            st.success("Test 1-Z completed!")
+            
+            snapshots_Q = np.array(snapshots_Q)
+            snapshots_A = np.array(snapshots_A)
+            snap_times = np.array(snap_times)
+            
+            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+            
+            im0 = axes[0].contourf(z, snap_times, snapshots_Q, levels=15, cmap='RdYlBu_r')
+            axes[0].set_xlabel('Position z (m)')
+            axes[0].set_ylabel('Time (s)')
+            axes[0].set_title('Flow Q Spatial-Temporal Evolution')
+            plt.colorbar(im0, ax=axes[0])
+            
+            im1 = axes[1].contourf(z, snap_times, snapshots_A, levels=15, cmap='viridis')
+            axes[1].set_xlabel('Position z (m)')
+            axes[1].set_ylabel('Time (s)')
+            axes[1].set_title('Area A Spatial-Temporal Evolution')
+            plt.colorbar(im1, ax=axes[1])
+            
+            plt.tight_layout()
+            st.pyplot(fig)
 
 st.markdown("---")
 st.markdown("""
