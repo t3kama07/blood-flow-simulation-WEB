@@ -19,7 +19,9 @@ page = st.sidebar.radio(
         "🫀 Simulation T (Time-based)",
         "🌊 Simulation Z (Space-based)",
         "💚 Healthy Artery Model",
-        "🧪 Test Simulations"
+        "🧪 Test 1-T (Cosine Bump)",
+        "🧪 Test 1-Z (Spatial)",
+        "🧪 Dimensionless Model"
     ]
 )
 
@@ -616,340 +618,346 @@ elif page == "💚 Healthy Artery Model":
         st.info("👈 **Adjust parameters and click 'Run Healthy Model' to begin**")
 
 # ============================================================
-# TEST SIMULATIONS
+# TEST 1-T: COSINE BUMP
 # ============================================================
-elif page == "🧪 Test Simulations":
-    st.title("🧪 Test Simulations & Validation Cases")
+elif page == "🧪 Test 1-T (Cosine Bump)":
+    st.title("🧪 Test 1-T: Cosine Bump Validation")
+    st.markdown("A simple validation test with analytical benchmark conditions.")
     
-    test_option = st.selectbox(
-        "Select a test case:",
-        ["Test 1-T: Cosine Bump", "Test 1-Z: Spatial Test", "Dimensionless Model"]
-    )
+    with st.sidebar.expander("⚙️ Parameters"):
+        domain_length = st.slider("Domain Length (m)", 0.1, 2.0, 1.0, 0.1, key="test_length")
+        grid_points = st.slider("Grid Points", 100, 500, 400, 50, key="test_grid")
+        final_time = st.slider("Final Time (s)", 0.5, 5.0, 2.6, 0.5, key="test_time")
+        run_test = st.button("🚀 Run Test 1-T", key="run_test_t", use_container_width=True)
     
-    if test_option == "Test 1-T: Cosine Bump":
-        st.subheader("Test 1-T: Smooth Cosine Bump Initial Conditions")
-        st.markdown("A simple validation test with analytical benchmark conditions.")
+    if run_test:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
         
-        with st.sidebar.expander("⚙️ Parameters"):
-            domain_length = st.slider("Domain Length (m)", 0.1, 2.0, 1.0, 0.1, key="test_length")
-            grid_points = st.slider("Grid Points", 100, 500, 400, 50, key="test_grid")
-            final_time = st.slider("Final Time (s)", 0.5, 5.0, 2.6, 0.5, key="test_time")
-            run_test = st.button("🚀 Run Test 1-T", key="run_test_t", use_container_width=True)
+        L = domain_length
+        Nx = grid_points
+        dz = L / Nx
+        z = np.linspace(0, L, Nx+1)
         
-        if run_test:
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+        Tfinal = final_time
+        c = 1.0
+        CFL = 0.4
+        dt = CFL * dz / c
+        Nt = int(Tfinal / dt) + 1
+        dt = Tfinal / Nt
+        
+        epsilon = 0.02
+        
+        def bump(z_vals, center, eps, amp=1.0):
+            s = (z_vals - center) / eps
+            out = np.zeros_like(z_vals)
+            mask = np.abs(s) < 1
+            out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
+            return out
+        
+        Q = bump(z, 0.4, epsilon, amp=1.0)
+        A = bump(z, 0.7, epsilon, amp=1.0)
+        
+        track_positions = [0.25, 0.50, 0.75]
+        track_indices = [np.argmin(np.abs(z - xp)) for xp in track_positions]
+        
+        time_arr = []
+        Q_track = {xp: [] for xp in track_positions}
+        A_track = {xp: [] for xp in track_positions}
+        
+        t = 0.0
+        for n in range(Nt + 1):
+            if n % max(1, Nt//10) == 0:
+                progress_bar.progress(min(n / (Nt+1), 1.0))
+                status_text.text(f"⏳ Processing... {n/(Nt+1)*100:.1f}%")
             
-            L = domain_length
-            Nx = grid_points
-            dz = L / Nx
-            z = np.linspace(0, L, Nx+1)
+            time_arr.append(t)
+            for xp, idx in zip(track_positions, track_indices):
+                Q_track[xp].append(Q[idx])
+                A_track[xp].append(A[idx])
             
-            Tfinal = final_time
-            c = 1.0
-            CFL = 0.4
-            dt = CFL * dz / c
-            Nt = int(Tfinal / dt) + 1
-            dt = Tfinal / Nt
+            Q[0], Q[-1] = Q[1], Q[-2]
+            A[0], A[-1] = A[1], A[-2]
             
-            epsilon = 0.02
+            Q_new = Q.copy()
+            A_new = A.copy()
+            for i in range(1, Nx):
+                Q_new[i] = Q[i] - 0.5*CFL*(Q[i+1] - Q[i-1])
+                A_new[i] = A[i] - 0.5*CFL*(A[i+1] - A[i-1])
             
-            def bump(z_vals, center, eps, amp=1.0):
-                s = (z_vals - center) / eps
-                out = np.zeros_like(z_vals)
-                mask = np.abs(s) < 1
-                out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
-                return out
-            
-            Q = bump(z, 0.4, epsilon, amp=1.0)
-            A = bump(z, 0.7, epsilon, amp=1.0)
-            
-            track_positions = [0.25, 0.50, 0.75]
-            track_indices = [np.argmin(np.abs(z - xp)) for xp in track_positions]
-            
-            time_arr = []
-            Q_track = {xp: [] for xp in track_positions}
-            A_track = {xp: [] for xp in track_positions}
-            
-            t = 0.0
-            for n in range(Nt + 1):
-                if n % max(1, Nt//10) == 0:
-                    progress_bar.progress(min(n / (Nt+1), 1.0))
-                    status_text.text(f"⏳ Processing... {n/(Nt+1)*100:.1f}%")
-                
-                time_arr.append(t)
-                for xp, idx in zip(track_positions, track_indices):
-                    Q_track[xp].append(Q[idx])
-                    A_track[xp].append(A[idx])
-                
-                Q[0], Q[-1] = Q[1], Q[-2]
-                A[0], A[-1] = A[1], A[-2]
-                
-                Q_new = Q.copy()
-                A_new = A.copy()
-                for i in range(1, Nx):
-                    Q_new[i] = Q[i] - 0.5*CFL*(Q[i+1] - Q[i-1])
-                    A_new[i] = A[i] - 0.5*CFL*(A[i+1] - A[i-1])
-                
-                Q = Q_new
-                A = A_new
-                t += dt
-            
-            progress_bar.progress(1.0)
-            status_text.text("✅ Test complete!")
-            
-            st.success("Test 1-T completed successfully!")
-            
-            fig, axes = plt.subplots(2, 1, figsize=(12, 8))
-            
-            time_arr = np.array(time_arr)
-            for xp in track_positions:
-                axes[0].plot(time_arr, Q_track[xp], label=f'z={xp}m', linewidth=2, alpha=0.7)
-            axes[0].set_ylabel('Flow Q', fontweight='bold')
-            axes[0].set_title('Flow Evolution at Tracking Points', fontweight='bold')
-            axes[0].legend()
-            axes[0].grid(True, alpha=0.3)
-            
-            for xp in track_positions:
-                axes[1].plot(time_arr, A_track[xp], label=f'z={xp}m', linewidth=2, alpha=0.7)
-            axes[1].set_ylabel('Area A', fontweight='bold')
-            axes[1].set_xlabel('Time (s)', fontweight='bold')
-            axes[1].set_title('Area Evolution at Tracking Points', fontweight='bold')
-            axes[1].legend()
-            axes[1].grid(True, alpha=0.3)
-            
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            st.subheader("📊 Test Statistics")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Grid Spacing (dz)", f"{dz:.6f} m")
-                st.metric("Time Step (dt)", f"{dt:.8f} s")
-            with col2:
-                st.metric("CFL Number", f"{CFL:.3f}")
-                st.metric("Total Time Steps", Nt)
+            Q = Q_new
+            A = A_new
+            t += dt
+        
+        progress_bar.progress(1.0)
+        status_text.text("✅ Test complete!")
+        
+        st.success("Test 1-T completed successfully!")
+        
+        fig, axes = plt.subplots(2, 1, figsize=(12, 8))
+        
+        time_arr = np.array(time_arr)
+        for xp in track_positions:
+            axes[0].plot(time_arr, Q_track[xp], label=f'z={xp}m', linewidth=2, alpha=0.7)
+        axes[0].set_ylabel('Flow Q', fontweight='bold')
+        axes[0].set_title('Flow Evolution at Tracking Points', fontweight='bold')
+        axes[0].legend()
+        axes[0].grid(True, alpha=0.3)
+        
+        for xp in track_positions:
+            axes[1].plot(time_arr, A_track[xp], label=f'z={xp}m', linewidth=2, alpha=0.7)
+        axes[1].set_ylabel('Area A', fontweight='bold')
+        axes[1].set_xlabel('Time (s)', fontweight='bold')
+        axes[1].set_title('Area Evolution at Tracking Points', fontweight='bold')
+        axes[1].legend()
+        axes[1].grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+        
+        st.subheader("📊 Test Statistics")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Grid Spacing (dz)", f"{dz:.6f} m")
+            st.metric("Time Step (dt)", f"{dt:.8f} s")
+        with col2:
+            st.metric("CFL Number", f"{CFL:.3f}")
+            st.metric("Total Time Steps", Nt)
+
+# ============================================================
+# TEST 1-Z: SPATIAL TEST
+# ============================================================
+elif page == "🧪 Test 1-Z (Spatial)":
+    st.title("🧪 Test 1-Z: Spatial Distribution Test")
+    st.markdown("Shows spatial evolution of test fields over multiple time snapshots.")
     
-    elif test_option == "Test 1-Z: Spatial Test":
-        st.subheader("Test 1-Z: Spatial Distribution Test")
-        st.markdown("Shows spatial evolution of test fields over multiple time snapshots.")
-        
-        with st.sidebar.expander("⚙️ Parameters"):
-            domain_length = st.slider("Domain Length (m)", 0.1, 2.0, 1.0, 0.1, key="testz_length")
-            run_test = st.button("🚀 Run Test 1-Z", key="run_test_z", use_container_width=True)
-        
-        if run_test:
-            st.info("Test 1-Z simulation running...")
-            
-            L = domain_length
-            Nx = 200
-            dz = L / Nx
-            z = np.linspace(0, L, Nx+1)
-            
-            c = 1.0
-            CFL = 0.4
-            dt = CFL * dz / c
-            Tfinal = 1.0
-            Nt = int(Tfinal / dt)
-            
-            epsilon = 0.05
-            
-            def bump(z_vals, center, eps, amp=1.0):
-                s = (z_vals - center) / eps
-                out = np.zeros_like(z_vals)
-                mask = np.abs(s) < 1
-                out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
-                return out
-            
-            Q = bump(z, 0.4, epsilon, amp=1.0)
-            A = bump(z, 0.7, epsilon, amp=1.0)
-            
-            snapshots_Q, snapshots_A, snap_times = [], [], []
-            save_freq = max(1, Nt // 10)
-            
-            t = 0.0
-            for n in range(Nt):
-                if n % save_freq == 0:
-                    snapshots_Q.append(Q.copy())
-                    snapshots_A.append(A.copy())
-                    snap_times.append(t)
-                
-                Q[0], Q[-1] = Q[1], Q[-2]
-                A[0], A[-1] = A[1], A[-2]
-                
-                Q_new = Q.copy()
-                A_new = A.copy()
-                for i in range(1, Nx):
-                    Q_new[i] = Q[i] - 0.5*CFL*(Q[i+1] - Q[i-1])
-                    A_new[i] = A[i] - 0.5*CFL*(A[i+1] - A[i-1])
-                
-                Q = Q_new
-                A = A_new
-                t += dt
-            
-            st.success("Test 1-Z completed!")
-            
-            snapshots_Q = np.array(snapshots_Q)
-            snapshots_A = np.array(snapshots_A)
-            snap_times = np.array(snap_times)
-            
-            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-            
-            im0 = axes[0].contourf(z, snap_times, snapshots_Q, levels=15, cmap='RdYlBu_r')
-            axes[0].set_xlabel('Position z (m)')
-            axes[0].set_ylabel('Time (s)')
-            axes[0].set_title('Flow Q Spatial-Temporal Evolution')
-            plt.colorbar(im0, ax=axes[0])
-            
-            im1 = axes[1].contourf(z, snap_times, snapshots_A, levels=15, cmap='viridis')
-            axes[1].set_xlabel('Position z (m)')
-            axes[1].set_ylabel('Time (s)')
-            axes[1].set_title('Area A Spatial-Temporal Evolution')
-            plt.colorbar(im1, ax=axes[1])
-            
-            plt.tight_layout()
-            st.pyplot(fig)
+    with st.sidebar.expander("⚙️ Parameters"):
+        domain_length = st.slider("Domain Length (m)", 0.1, 2.0, 1.0, 0.1, key="testz_length")
+        run_test = st.button("🚀 Run Test 1-Z", key="run_test_z", use_container_width=True)
     
-    elif test_option == "Dimensionless Model":
-        st.subheader("Dimensionless Model: K1=0 Damping Test")
-        st.markdown("Tests dimensionless formulation with damping coefficient K3.")
+    if run_test:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
         
-        with st.sidebar.expander("⚙️ Parameters"):
-            K3_param = st.slider("Damping Coefficient K3", 0.0, 0.001, 0.0002, 0.00005, key="dim_k3")
-            run_test_dim = st.button("🚀 Run Dimensionless Test", key="run_test_dim", use_container_width=True)
+        L = domain_length
+        Nx = 200
+        dz = L / Nx
+        z = np.linspace(0, L, Nx+1)
         
-        if run_test_dim:
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+        c = 1.0
+        CFL = 0.4
+        dt = CFL * dz / c
+        Tfinal = 1.0
+        Nt = int(Tfinal / dt)
+        
+        epsilon = 0.05
+        
+        def bump(z_vals, center, eps, amp=1.0):
+            s = (z_vals - center) / eps
+            out = np.zeros_like(z_vals)
+            mask = np.abs(s) < 1
+            out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
+            return out
+        
+        Q = bump(z, 0.4, epsilon, amp=1.0)
+        A = bump(z, 0.7, epsilon, amp=1.0)
+        
+        snapshots_Q, snapshots_A, snap_times = [], [], []
+        save_freq = max(1, Nt // 10)
+        
+        t = 0.0
+        for n in range(Nt):
+            if n % max(1, Nt//10) == 0:
+                progress_bar.progress(min(n / Nt, 1.0))
+                status_text.text(f"⏳ Processing... {n/Nt*100:.1f}%")
             
-            K3 = K3_param
-            N = 400
-            dx = 1.0 / N
-            x = (np.arange(N) + 0.5) * dx
+            if n % save_freq == 0:
+                snapshots_Q.append(Q.copy())
+                snapshots_A.append(A.copy())
+                snap_times.append(t)
             
-            tau_final = 2.6
-            CFL = 0.4
-            dt = CFL * dx
-            Nt = int(tau_final / dt)
-            dt = tau_final / Nt
+            Q[0], Q[-1] = Q[1], Q[-2]
+            A[0], A[-1] = A[1], A[-2]
             
-            a = np.zeros(N + 2)
-            q = np.zeros(N + 2)
+            Q_new = Q.copy()
+            A_new = A.copy()
+            for i in range(1, Nx):
+                Q_new[i] = Q[i] - 0.5*CFL*(Q[i+1] - Q[i-1])
+                A_new[i] = A[i] - 0.5*CFL*(A[i+1] - A[i-1])
             
-            def bump_dim(x_vals, center, width, amp):
-                s = (x_vals - center) / width
-                out = np.zeros_like(x_vals)
-                mask = np.abs(s) < 1
-                out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
-                return out
+            Q = Q_new
+            A = A_new
+            t += dt
+        
+        progress_bar.progress(1.0)
+        status_text.text("✅ Test complete!")
+        
+        st.success("Test 1-Z completed!")
+        
+        snapshots_Q = np.array(snapshots_Q)
+        snapshots_A = np.array(snapshots_A)
+        snap_times = np.array(snap_times)
+        
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        
+        im0 = axes[0].contourf(z, snap_times, snapshots_Q, levels=15, cmap='RdYlBu_r')
+        axes[0].set_xlabel('Position z (m)')
+        axes[0].set_ylabel('Time (s)')
+        axes[0].set_title('Flow Q Spatial-Temporal Evolution')
+        plt.colorbar(im0, ax=axes[0])
+        
+        im1 = axes[1].contourf(z, snap_times, snapshots_A, levels=15, cmap='viridis')
+        axes[1].set_xlabel('Position z (m)')
+        axes[1].set_ylabel('Time (s)')
+        axes[1].set_title('Area A Spatial-Temporal Evolution')
+        plt.colorbar(im1, ax=axes[1])
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+
+# ============================================================
+# TEST DIMENSIONLESS MODEL
+# ============================================================
+elif page == "🧪 Dimensionless Model":
+    st.title("🧪 Dimensionless Model: K1=0 Damping Test")
+    st.markdown("Tests dimensionless formulation with damping coefficient K3.")
+    
+    with st.sidebar.expander("⚙️ Parameters"):
+        K3_param = st.slider("Damping Coefficient K3", 0.0, 0.001, 0.0002, 0.00005, key="dim_k3")
+        run_test_dim = st.button("🚀 Run Dimensionless Test", key="run_test_dim", use_container_width=True)
+    
+    if run_test_dim:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        K3 = K3_param
+        N = 400
+        dx = 1.0 / N
+        x = (np.arange(N) + 0.5) * dx
+        
+        tau_final = 2.6
+        CFL = 0.4
+        dt = CFL * dx
+        Nt = int(tau_final / dt)
+        dt = tau_final / Nt
+        
+        a = np.zeros(N + 2)
+        q = np.zeros(N + 2)
+        
+        def bump_dim(x_vals, center, width, amp):
+            s = (x_vals - center) / width
+            out = np.zeros_like(x_vals)
+            mask = np.abs(s) < 1
+            out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
+            return out
+        
+        eps = 0.020
+        a[1:-1] = bump_dim(x, center=0.7, width=eps, amp=0.10)
+        q[1:-1] = bump_dim(x, center=0.4, width=eps, amp=0.02)
+        
+        def apply_bc_dim(a, q):
+            a[0] = a[1]
+            q[0] = q[1]
+            a[-1] = a[-2]
+            q[-1] = q[-2]
+        
+        def mac_cormack_dim(a, q):
+            a_p = a.copy()
+            q_p = q.copy()
             
-            eps = 0.020
-            a[1:-1] = bump_dim(x, center=0.7, width=eps, amp=0.10)
-            q[1:-1] = bump_dim(x, center=0.4, width=eps, amp=0.02)
+            for i in range(1, N + 1):
+                a_p[i] = a[i] - (dt/dx)*(q[i+1] - q[i])
+                q_p[i] = q[i] - (dt/dx)*(a[i+1] - a[i]) - dt*K3*q[i]
             
-            def apply_bc_dim(a, q):
-                a[0] = a[1]
-                q[0] = q[1]
-                a[-1] = a[-2]
-                q[-1] = q[-2]
+            apply_bc_dim(a_p, q_p)
             
-            def mac_cormack_dim(a, q):
-                a_p = a.copy()
-                q_p = q.copy()
-                
-                for i in range(1, N + 1):
-                    a_p[i] = a[i] - (dt/dx)*(q[i+1] - q[i])
-                    q_p[i] = q[i] - (dt/dx)*(a[i+1] - a[i]) - dt*K3*q[i]
-                
-                apply_bc_dim(a_p, q_p)
-                
-                a_new = a.copy()
-                q_new = q.copy()
-                
-                for i in range(1, N + 1):
-                    a_new[i] = 0.5*(a[i] + a_p[i] - (dt/dx)*(q_p[i] - q_p[i-1]))
-                    q_new[i] = 0.5*(q[i] + q_p[i]
-                                    - (dt/dx)*(a_p[i] - a_p[i-1])
-                                    - dt*K3*q_p[i])
-                
-                return a_new, q_new
+            a_new = a.copy()
+            q_new = q.copy()
             
+            for i in range(1, N + 1):
+                a_new[i] = 0.5*(a[i] + a_p[i] - (dt/dx)*(q_p[i] - q_p[i-1]))
+                q_new[i] = 0.5*(q[i] + q_p[i]
+                                - (dt/dx)*(a_p[i] - a_p[i-1])
+                                - dt*K3*q_p[i])
+            
+            return a_new, q_new
+        
+        apply_bc_dim(a, q)
+        
+        a_hist = []
+        q_hist = []
+        t_hist = []
+        save_every = 50
+        tau = 0.0
+        
+        for n in range(Nt + 1):
+            if n % max(1, Nt//10) == 0:
+                progress_bar.progress(min(n / (Nt+1), 1.0))
+                status_text.text(f"⏳ Processing... {n/(Nt+1)*100:.1f}%")
+            
+            if n % save_every == 0:
+                a_hist.append(a[1:-1].copy())
+                q_hist.append(q[1:-1].copy())
+                t_hist.append(tau)
+            
+            a, q = mac_cormack_dim(a, q)
             apply_bc_dim(a, q)
-            
-            a_hist = []
-            q_hist = []
-            t_hist = []
-            save_every = 50
-            tau = 0.0
-            
-            for n in range(Nt + 1):
-                if n % max(1, Nt//10) == 0:
-                    progress_bar.progress(min(n / (Nt+1), 1.0))
-                    status_text.text(f"⏳ Processing... {n/(Nt+1)*100:.1f}%")
-                
-                if n % save_every == 0:
-                    a_hist.append(a[1:-1].copy())
-                    q_hist.append(q[1:-1].copy())
-                    t_hist.append(tau)
-                
-                a, q = mac_cormack_dim(a, q)
-                apply_bc_dim(a, q)
-                tau += dt
-            
-            progress_bar.progress(1.0)
-            status_text.text("✅ Test complete!")
-            
-            st.success("Dimensionless model test completed!")
-            
-            a_hist = np.array(a_hist)
-            q_hist = np.array(q_hist)
-            t_hist = np.array(t_hist)
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Damping K3", f"{K3:.6f}")
-            with col2:
-                st.metric("Grid Points", N)
-            
-            fig, axes = plt.subplots(2, 1, figsize=(12, 10))
-            
-            im0 = axes[0].contourf(x, t_hist, a_hist, levels=15, cmap='RdYlBu_r')
-            axes[0].set_ylabel('Time τ', fontweight='bold')
-            axes[0].set_title('Area (a) Spatio-Temporal Evolution - Dimensionless', fontweight='bold')
-            plt.colorbar(im0, ax=axes[0], label='a')
-            
-            im1 = axes[1].contourf(x, t_hist, q_hist, levels=15, cmap='viridis')
-            axes[1].set_xlabel('Position x', fontweight='bold')
-            axes[1].set_ylabel('Time τ', fontweight='bold')
-            axes[1].set_title('Flow (q) Spatio-Temporal Evolution - Dimensionless', fontweight='bold')
-            plt.colorbar(im1, ax=axes[1], label='q')
-            
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            st.subheader("📊 Field Profiles at Different Times")
-            
-            fig2, axes2 = plt.subplots(1, 2, figsize=(14, 5))
-            
-            times_to_plot = [0, len(t_hist)//2, -1]
-            for idx in times_to_plot:
-                axes2[0].plot(x, a_hist[idx], label=f'τ={t_hist[idx]:.2f}', linewidth=2, alpha=0.7)
-            axes2[0].set_xlabel('Position x', fontweight='bold')
-            axes2[0].set_ylabel('Area (a)', fontweight='bold')
-            axes2[0].set_title('Area Profiles', fontweight='bold')
-            axes2[0].legend()
-            axes2[0].grid(True, alpha=0.3)
-            
-            for idx in times_to_plot:
-                axes2[1].plot(x, q_hist[idx], label=f'τ={t_hist[idx]:.2f}', linewidth=2, alpha=0.7)
-            axes2[1].set_xlabel('Position x', fontweight='bold')
-            axes2[1].set_ylabel('Flow (q)', fontweight='bold')
-            axes2[1].set_title('Flow Profiles', fontweight='bold')
-            axes2[1].legend()
-            axes2[1].grid(True, alpha=0.3)
-            
-            plt.tight_layout()
-            st.pyplot(fig2)
+            tau += dt
+        
+        progress_bar.progress(1.0)
+        status_text.text("✅ Test complete!")
+        
+        st.success("Dimensionless model test completed!")
+        
+        a_hist = np.array(a_hist)
+        q_hist = np.array(q_hist)
+        t_hist = np.array(t_hist)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Damping K3", f"{K3:.6f}")
+        with col2:
+            st.metric("Grid Points", N)
+        
+        fig, axes = plt.subplots(2, 1, figsize=(12, 10))
+        
+        im0 = axes[0].contourf(x, t_hist, a_hist, levels=15, cmap='RdYlBu_r')
+        axes[0].set_ylabel('Time τ', fontweight='bold')
+        axes[0].set_title('Area (a) Spatio-Temporal Evolution - Dimensionless', fontweight='bold')
+        plt.colorbar(im0, ax=axes[0], label='a')
+        
+        im1 = axes[1].contourf(x, t_hist, q_hist, levels=15, cmap='viridis')
+        axes[1].set_xlabel('Position x', fontweight='bold')
+        axes[1].set_ylabel('Time τ', fontweight='bold')
+        axes[1].set_title('Flow (q) Spatio-Temporal Evolution - Dimensionless', fontweight='bold')
+        plt.colorbar(im1, ax=axes[1], label='q')
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+        
+        st.subheader("📊 Field Profiles at Different Times")
+        
+        fig2, axes2 = plt.subplots(1, 2, figsize=(14, 5))
+        
+        times_to_plot = [0, len(t_hist)//2, -1]
+        for idx in times_to_plot:
+            axes2[0].plot(x, a_hist[idx], label=f'τ={t_hist[idx]:.2f}', linewidth=2, alpha=0.7)
+        axes2[0].set_xlabel('Position x', fontweight='bold')
+        axes2[0].set_ylabel('Area (a)', fontweight='bold')
+        axes2[0].set_title('Area Profiles', fontweight='bold')
+        axes2[0].legend()
+        axes2[0].grid(True, alpha=0.3)
+        
+        for idx in times_to_plot:
+            axes2[1].plot(x, q_hist[idx], label=f'τ={t_hist[idx]:.2f}', linewidth=2, alpha=0.7)
+        axes2[1].set_xlabel('Position x', fontweight='bold')
+        axes2[1].set_ylabel('Flow (q)', fontweight='bold')
+        axes2[1].set_title('Flow Profiles', fontweight='bold')
+        axes2[1].legend()
+        axes2[1].grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        st.pyplot(fig2)
 
 st.markdown("---")
 st.markdown("""
