@@ -269,7 +269,7 @@ elif page == "🫀 Simulation T (Time-based)":
             st.metric("Max Area (inlet)", f"{max(A_store[0])*1e6:.2f} mm²")
             st.metric("Min Area (inlet)", f"{min(A_store[0])*1e6:.2f} mm²")
     else:
-        # Parameters are now static; no sidebar adjustment needed.
+        pass
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Wave Speed (preview)", f"{c:.3f} m/s")
@@ -462,7 +462,7 @@ elif page == "🌊 Simulation Z (Space-based)":
         plt.tight_layout()
         st.pyplot(fig2)
     else:
-        st.info("👈 **Adjust parameters and click 'Run Simulation Z' to begin**")
+        # Parameters are now static; no sidebar adjustment needed.
 
 # ============================================================
 # HEALTHY ARTERY MODEL
@@ -576,7 +576,7 @@ elif page == "💚 Healthy Artery Model":
         A_store_h = np.array(A_store_h)
         return time_store, p_store_h, Q_store_h, A_store_h, z, h_wall, c0
 
-    st.info("Click 'Run Healthy Model' to simulate and view results.")
+    pass
     if 'healthy_results' not in st.session_state:
         st.session_state['healthy_results'] = None
     run_button = st.button("Run Healthy Model", key="run_healthy", use_container_width=True)
