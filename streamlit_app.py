@@ -98,11 +98,21 @@ elif page == "🫀 Simulation T (Time-based)":
     the one-dimensional blood flow equations with the MacCormack numerical scheme.
     """)
     
-    with st.sidebar.expander("⚙️ Parameters"):
-        L = st.slider("Artery Length (m)", 0.05, 1.0, 0.15, 0.01, key="t_length")
-        D_ref = st.slider("Reference Diameter (mm)", 1.0, 20.0, 3.0, 0.5, key="t_diameter") / 1000.0
-        E = st.slider("Young's Modulus (Pa)", 0.5e6, 5.0e6, 1.5e6, 0.1e6, key="t_modulus")
-        run_button = st.button("🚀 Run Simulation T", key="run_t", use_container_width=True)
+    # Static parameters (fixed, no sliders)
+    L = 0.15  # Artery length [m]
+    D_ref = 3.0e-3  # Reference diameter [m]
+    E = 1.5e6  # Young's Modulus [Pa]
+    
+    # Display parameter values
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Artery Length", f"{L*1000:.1f} mm")
+    with col2:
+        st.metric("Diameter", f"{D_ref*1000:.2f} mm")
+    with col3:
+        st.metric("Young's Modulus", f"{E/1e6:.1f} MPa")
+    
+    run_button = st.button("🚀 Run Simulation T", key="run_t", use_container_width=True)
     
     # Physical parameters
     rho = 1060.0
@@ -291,11 +301,21 @@ elif page == "🌊 Simulation Z (Space-based)":
     st.title("🌊 Simulation Z: Space-Based Analysis")
     st.markdown("Shows spatial distribution of pressure, flow, and area along the artery at different time snapshots.")
     
-    with st.sidebar.expander("⚙️ Parameters"):
-        L = st.slider("Artery Length (m)", 0.05, 1.0, 0.15, 0.01, key="z_length")
-        D_ref = st.slider("Reference Diameter (mm)", 1.0, 20.0, 3.0, 0.5, key="z_diameter") / 1000.0
-        E = st.slider("Young's Modulus (Pa)", 0.5e6, 5.0e6, 1.5e6, 0.1e6, key="z_modulus")
-        run_button = st.button("🚀 Run Simulation Z", key="run_z", use_container_width=True)
+    # Static parameters (fixed, no sliders)
+    L = 0.15  # Artery length [m]
+    D_ref = 3.0e-3  # Reference diameter [m]
+    E = 1.5e6  # Young's Modulus [Pa]
+    
+    # Display parameter values
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Artery Length", f"{L*1000:.1f} mm")
+    with col2:
+        st.metric("Diameter", f"{D_ref*1000:.2f} mm")
+    with col3:
+        st.metric("Young's Modulus", f"{E/1e6:.1f} MPa")
+    
+    run_button = st.button("🚀 Run Simulation Z", key="run_z", use_container_width=True)
     
     rho = 1060.0
     mu = 3.5e-3
@@ -467,12 +487,24 @@ elif page == "💚 Healthy Artery Model":
     st.title("💚 Healthy Artery Model")
     st.markdown("Advanced model with improved wall properties and compliance.")
     
-    with st.sidebar.expander("⚙️ Parameters"):
-        L = st.slider("Artery Length (m)", 0.05, 1.0, 0.15, 0.01, key="h_length")
-        D_ref = st.slider("Reference Diameter (mm)", 1.0, 20.0, 3.0, 0.5, key="h_diameter") / 1000.0
-        h_wall = st.slider("Wall Thickness (mm)", 0.05, 1.0, 0.3, 0.05, key="h_thickness") / 1000.0
-        E = st.slider("Young's Modulus (Pa)", 0.5e6, 5.0e6, 1.5e6, 0.1e6, key="h_modulus")
-        run_button = st.button("🚀 Run Healthy Model", key="run_healthy", use_container_width=True)
+    # Static parameters (fixed, no sliders)
+    L = 0.15  # Artery length [m]
+    D_ref = 3.0e-3  # Reference diameter [m]
+    h_wall = 3.0e-4  # Wall thickness [m]
+    E = 1.5e6  # Young's Modulus [Pa]
+    
+    # Display parameter values
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Artery Length", f"{L*1000:.1f} mm")
+    with col2:
+        st.metric("Diameter", f"{D_ref*1000:.2f} mm")
+    with col3:
+        st.metric("Wall Thickness", f"{h_wall*1e6:.1f} µm")
+    with col4:
+        st.metric("Young's Modulus", f"{E/1e6:.1f} MPa")
+    
+    run_button = st.button("🚀 Run Healthy Model", key="run_healthy", use_container_width=True)
     
     rho = 1060.0
     mu = 3.5e-3
@@ -624,11 +656,21 @@ elif page == "🧪 Test 1-T (Cosine Bump)":
     st.title("🧪 Test 1-T: Cosine Bump Validation")
     st.markdown("A simple validation test with analytical benchmark conditions.")
     
-    with st.sidebar.expander("⚙️ Parameters"):
-        domain_length = st.slider("Domain Length (m)", 0.1, 2.0, 1.0, 0.1, key="test_length")
-        grid_points = st.slider("Grid Points", 100, 500, 400, 50, key="test_grid")
-        final_time = st.slider("Final Time (s)", 0.5, 5.0, 2.6, 0.5, key="test_time")
-        run_test = st.button("🚀 Run Test 1-T", key="run_test_t", use_container_width=True)
+    # Static parameters (fixed, no sliders)
+    domain_length = 1.0  # Domain length [m]
+    grid_points = 400  # Grid points
+    final_time = 2.6  # Final time [s]
+    
+    # Display parameter values
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Domain Length", f"{domain_length:.2f} m")
+    with col2:
+        st.metric("Grid Points", grid_points)
+    with col3:
+        st.metric("Final Time", f"{final_time:.2f} s")
+    
+    run_test = st.button("🚀 Run Test 1-T", key="run_test_t", use_container_width=True)
     
     if run_test:
         progress_bar = st.progress(0)
@@ -731,9 +773,13 @@ elif page == "🧪 Test 1-Z (Spatial)":
     st.title("🧪 Test 1-Z: Spatial Distribution Test")
     st.markdown("Shows spatial evolution of test fields over multiple time snapshots.")
     
-    with st.sidebar.expander("⚙️ Parameters"):
-        domain_length = st.slider("Domain Length (m)", 0.1, 2.0, 1.0, 0.1, key="testz_length")
-        run_test = st.button("🚀 Run Test 1-Z", key="run_test_z", use_container_width=True)
+    # Static parameters (fixed, no sliders)
+    domain_length = 1.0  # Domain length [m]
+    
+    # Display parameter values
+    st.metric("Domain Length", f"{domain_length:.2f} m")
+    
+    run_test = st.button("🚀 Run Test 1-Z", key="run_test_z", use_container_width=True)
     
     if run_test:
         progress_bar = st.progress(0)
