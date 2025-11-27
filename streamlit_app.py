@@ -577,12 +577,15 @@ elif page == "💚 Healthy Artery Model":
         return time_store, p_store_h, Q_store_h, A_store_h, z, h_wall, c0
 
     st.info("Click 'Run Healthy Model' to simulate and view results.")
+    if 'healthy_results' not in st.session_state:
+        st.session_state['healthy_results'] = None
     run_button = st.button("Run Healthy Model", key="run_healthy", use_container_width=True)
     if run_button:
         with st.spinner("Running Healthy Artery Model simulation..."):
-            time_store, p_store_h, Q_store_h, A_store_h, z, h_wall, c0 = run_healthy_model()
+            st.session_state['healthy_results'] = run_healthy_model()
         st.success("Healthy model simulation completed!")
-        # --- Time slider ---
+    if st.session_state['healthy_results'] is not None:
+        time_store, p_store_h, Q_store_h, A_store_h, z, h_wall, c0 = st.session_state['healthy_results']
         idx = st.slider("Select time snapshot", 0, len(time_store)-1, 0, format="%d")
         t_val = time_store[idx]
         col1, col2 = st.columns(2)
