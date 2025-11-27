@@ -766,10 +766,10 @@ elif page == "🧪 Test 1-Z (Spatial)":
         save_freq = max(1, Nt // 10)
         
         t = 0.0
-        for n in range(Nt):
+        for n in range(Nt + 1):
             if n % max(1, Nt//10) == 0:
-                progress_bar.progress(min(n / Nt, 1.0))
-                status_text.text(f"⏳ Processing... {n/Nt*100:.1f}%")
+                progress_bar.progress(min(n / (Nt+1), 1.0))
+                status_text.text(f"⏳ Processing... {n/(Nt+1)*100:.1f}%")
             
             if n % save_freq == 0:
                 snapshots_Q.append(Q.copy())
@@ -826,14 +826,16 @@ elif page == "🧪 Dimensionless Model":
         K3_param = st.slider("Damping Coefficient K3", 0.0, 0.001, 0.0002, 0.00005, key="dim_k3")
         run_test_dim = st.button("🚀 Run Dimensionless Test", key="run_test_dim", use_container_width=True)
     
+    # Define grid outside the if block so it's available for plotting
+    N = 400
+    dx = 1.0 / N
+    x = (np.arange(N) + 0.5) * dx
+    
     if run_test_dim:
         progress_bar = st.progress(0)
         status_text = st.empty()
         
         K3 = K3_param
-        N = 400
-        dx = 1.0 / N
-        x = (np.arange(N) + 0.5) * dx
         
         tau_final = 2.6
         CFL = 0.4
