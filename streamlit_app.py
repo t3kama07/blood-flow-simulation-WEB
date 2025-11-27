@@ -623,7 +623,7 @@ elif page == "🧪 Test Simulations":
     
     test_option = st.selectbox(
         "Select a test case:",
-        ["Test 1-T: Cosine Bump", "Test 1-Z: Spatial Test"]
+        ["Test 1-T: Cosine Bump", "Test 1-Z: Spatial Test", "Dimensionless Model"]
     )
     
     if test_option == "Test 1-T: Cosine Bump":
@@ -809,6 +809,147 @@ elif page == "🧪 Test Simulations":
             
             plt.tight_layout()
             st.pyplot(fig)
+    
+    elif test_option == "Dimensionless Model":
+        st.subheader("Dimensionless Model: K1=0 Damping Test")
+        st.markdown("Tests dimensionless formulation with damping coefficient K3.")
+        
+        with st.sidebar.expander("⚙️ Parameters"):
+            K3_param = st.slider("Damping Coefficient K3", 0.0, 0.001, 0.0002, 0.00005, key="dim_k3")
+            run_test_dim = st.button("🚀 Run Dimensionless Test", key="run_test_dim", use_container_width=True)
+        
+        if run_test_dim:
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            K3 = K3_param
+            N = 400
+            dx = 1.0 / N
+            x = (np.arange(N) + 0.5) * dx
+            
+            tau_final = 2.6
+            CFL = 0.4
+            dt = CFL * dx
+            Nt = int(tau_final / dt)
+            dt = tau_final / Nt
+            
+            a = np.zeros(N + 2)
+            q = np.zeros(N + 2)
+            
+            def bump_dim(x_vals, center, width, amp):
+                s = (x_vals - center) / width
+                out = np.zeros_like(x_vals)
+                mask = np.abs(s) < 1
+                out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
+                return out
+            
+            eps = 0.020
+            a[1:-1] = bump_dim(x, center=0.7, width=eps, amp=0.10)
+            q[1:-1] = bump_dim(x, center=0.4, width=eps, amp=0.02)
+            
+            def apply_bc_dim(a, q):
+                a[0] = a[1]
+                q[0] = q[1]
+                a[-1] = a[-2]
+                q[-1] = q[-2]
+            
+            def mac_cormack_dim(a, q):
+                a_p = a.copy()
+                q_p = q.copy()
+                
+                for i in range(1, N + 1):
+                    a_p[i] = a[i] - (dt/dx)*(q[i+1] - q[i])
+                    q_p[i] = q[i] - (dt/dx)*(a[i+1] - a[i]) - dt*K3*q[i]
+                
+                apply_bc_dim(a_p, q_p)
+                
+                a_new = a.copy()
+                q_new = q.copy()
+                
+                for i in range(1, N + 1):
+                    a_new[i] = 0.5*(a[i] + a_p[i] - (dt/dx)*(q_p[i] - q_p[i-1]))
+                    q_new[i] = 0.5*(q[i] + q_p[i]
+                                    - (dt/dx)*(a_p[i] - a_p[i-1])
+                                    - dt*K3*q_p[i])
+                
+                return a_new, q_new
+            
+            apply_bc_dim(a, q)
+            
+            a_hist = []
+            q_hist = []
+            t_hist = []
+            save_every = 50
+            tau = 0.0
+            
+            for n in range(Nt + 1):
+                if n % max(1, Nt//10) == 0:
+                    progress_bar.progress(min(n / (Nt+1), 1.0))
+                    status_text.text(f"⏳ Processing... {n/(Nt+1)*100:.1f}%")
+                
+                if n % save_every == 0:
+                    a_hist.append(a[1:-1].copy())
+                    q_hist.append(q[1:-1].copy())
+                    t_hist.append(tau)
+                
+                a, q = mac_cormack_dim(a, q)
+                apply_bc_dim(a, q)
+                tau += dt
+            
+            progress_bar.progress(1.0)
+            status_text.text("✅ Test complete!")
+            
+            st.success("Dimensionless model test completed!")
+            
+            a_hist = np.array(a_hist)
+            q_hist = np.array(q_hist)
+            t_hist = np.array(t_hist)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Damping K3", f"{K3:.6f}")
+            with col2:
+                st.metric("Grid Points", N)
+            
+            fig, axes = plt.subplots(2, 1, figsize=(12, 10))
+            
+            im0 = axes[0].contourf(x, t_hist, a_hist, levels=15, cmap='RdYlBu_r')
+            axes[0].set_ylabel('Time τ', fontweight='bold')
+            axes[0].set_title('Area (a) Spatio-Temporal Evolution - Dimensionless', fontweight='bold')
+            plt.colorbar(im0, ax=axes[0], label='a')
+            
+            im1 = axes[1].contourf(x, t_hist, q_hist, levels=15, cmap='viridis')
+            axes[1].set_xlabel('Position x', fontweight='bold')
+            axes[1].set_ylabel('Time τ', fontweight='bold')
+            axes[1].set_title('Flow (q) Spatio-Temporal Evolution - Dimensionless', fontweight='bold')
+            plt.colorbar(im1, ax=axes[1], label='q')
+            
+            plt.tight_layout()
+            st.pyplot(fig)
+            
+            st.subheader("📊 Field Profiles at Different Times")
+            
+            fig2, axes2 = plt.subplots(1, 2, figsize=(14, 5))
+            
+            times_to_plot = [0, len(t_hist)//2, -1]
+            for idx in times_to_plot:
+                axes2[0].plot(x, a_hist[idx], label=f'τ={t_hist[idx]:.2f}', linewidth=2, alpha=0.7)
+            axes2[0].set_xlabel('Position x', fontweight='bold')
+            axes2[0].set_ylabel('Area (a)', fontweight='bold')
+            axes2[0].set_title('Area Profiles', fontweight='bold')
+            axes2[0].legend()
+            axes2[0].grid(True, alpha=0.3)
+            
+            for idx in times_to_plot:
+                axes2[1].plot(x, q_hist[idx], label=f'τ={t_hist[idx]:.2f}', linewidth=2, alpha=0.7)
+            axes2[1].set_xlabel('Position x', fontweight='bold')
+            axes2[1].set_ylabel('Flow (q)', fontweight='bold')
+            axes2[1].set_title('Flow Profiles', fontweight='bold')
+            axes2[1].legend()
+            axes2[1].grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            st.pyplot(fig2)
 
 st.markdown("---")
 st.markdown("""
