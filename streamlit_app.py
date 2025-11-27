@@ -972,46 +972,29 @@ elif page == "🧪 Dimensionless Model":
     q_hist = np.array(q_hist)
     t_hist = np.array(t_hist)
     
-    # Display results as static plots
-    col1, col2 = st.columns(2)
+    # Display static snapshots at initial, middle, and final times
+    st.subheader("📊 Snapshots at Selected Times")
+    idxs = [0, len(t_hist)//2, -1]
+    labels = [f"Initial (τ={t_hist[0]:.4f})", f"Middle (τ={t_hist[len(t_hist)//2]:.4f})", f"Final (τ={t_hist[-1]:.4f})"]
+    for i, idx in enumerate(idxs):
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.plot(x, q_hist[idx], color='tab:blue', label="q(x, τ)", linewidth=2.5)
+        ax.plot(x, a_hist[idx], color='tab:orange', label="a(x, τ)", linewidth=2.5)
+        ax.set_xlabel("x (dimensionless)", fontsize=12, fontweight='bold')
+        ax.set_ylabel("Dimensionless Value", fontsize=12, fontweight='bold')
+        ax.set_title(labels[i], fontsize=13, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=11)
+        plt.tight_layout()
+        st.pyplot(fig, use_container_width=True)
+    st.subheader("📈 Summary")
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Damping K3", f"{K3:.6f}")
+        st.metric("Total snapshots", len(t_hist))
     with col2:
-        st.metric("Grid Points", N)
-    
-    # Final time snapshot
-    st.subheader("📊 Final Time Snapshot (τ = {:.4f})".format(t_hist[-1]))
-    
-    fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(x, q_hist[-1], color='tab:blue', label="q(x, τ)", linewidth=2.5)
-    ax.plot(x, a_hist[-1], color='tab:orange', label="a(x, τ)", linewidth=2.5)
-    ax.set_xlabel("x (dimensionless)", fontsize=12, fontweight='bold')
-    ax.set_ylabel("Dimensionless Value", fontsize=12, fontweight='bold')
-    ax.set_title("MacCormack Scheme: Final Time", fontsize=13, fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=11)
-    plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)
-    
-    # Spatio-temporal contour plots
-    st.subheader("📈 Full Spatio-Temporal Evolution")
-    st.markdown("Complete evolution of area (a) and flow (q) over space and time.")
-    
-    fig2, axes2 = plt.subplots(2, 1, figsize=(12, 10))
-    
-    im0 = axes2[0].contourf(x, t_hist, a_hist, levels=20, cmap='RdYlBu_r')
-    axes2[0].set_ylabel('Time τ', fontweight='bold', fontsize=11)
-    axes2[0].set_title('Area (a) Spatio-Temporal Evolution - Dimensionless', fontweight='bold', fontsize=12)
-    cbar0 = plt.colorbar(im0, ax=axes2[0], label='a')
-    
-    im1 = axes2[1].contourf(x, t_hist, q_hist, levels=20, cmap='viridis')
-    axes2[1].set_xlabel('Position x', fontweight='bold', fontsize=11)
-    axes2[1].set_ylabel('Time τ', fontweight='bold', fontsize=11)
-    axes2[1].set_title('Flow (q) Spatio-Temporal Evolution - Dimensionless', fontweight='bold', fontsize=12)
-    cbar1 = plt.colorbar(im1, ax=axes2[1], label='q')
-    
-    plt.tight_layout()
-    st.pyplot(fig2, use_container_width=True)
+        st.metric("Final time", f"{t_hist[-1]:.2f}")
+    with col3:
+        st.metric("Spatial points", len(x))
 
 st.markdown("---")
 st.markdown("""
