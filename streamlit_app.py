@@ -820,178 +820,138 @@ elif page == "🧪 Test 1-Z (Spatial)":
 # ============================================================
 elif page == "🧪 Dimensionless Model":
     st.title("🧪 Dimensionless Model: K1=0 Damping Test")
-    st.markdown("Tests dimensionless formulation with damping coefficient K3.")
+    st.markdown("Tests dimensionless formulation with MacCormack predictor-corrector scheme (original code).")
     
-    with st.sidebar.expander("⚙️ Parameters"):
-        K3_param = st.slider("Damping Coefficient K3", 0.0, 0.001, 0.0002, 0.00005, key="dim_k3")
-        run_test_dim = st.button("🚀 Run Dimensionless Test", key="run_test_dim", use_container_width=True)
-    
-    # Define grid outside the if block so it's available for plotting
+    # Original static parameters - no user interaction
+    K3 = 0.0002
     N = 400
     dx = 1.0 / N
     x = (np.arange(N) + 0.5) * dx
     
-    if run_test_dim:
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+    tau_final = 2.6
+    CFL = 0.4
+    dt = CFL * dx
+    Nt = int(tau_final / dt)
+    dt = tau_final / Nt
+    
+    a = np.zeros(N + 2)
+    q = np.zeros(N + 2)
+    
+    def bump_dim(x_vals, center, width, amp):
+        s = (x_vals - center) / width
+        out = np.zeros_like(x_vals)
+        mask = np.abs(s) < 1
+        out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
+        return out
+    
+    eps = 0.020
+    a[1:-1] = bump_dim(x, center=0.7, width=eps, amp=0.10)
+    q[1:-1] = bump_dim(x, center=0.4, width=eps, amp=0.02)
+    
+    def apply_bc_dim(a, q):
+        a[0] = a[1]
+        q[0] = q[1]
+        a[-1] = a[-2]
+        q[-1] = q[-2]
+    
+    def mac_cormack_dim(a, q):
+        """MacCormack predictor-corrector scheme."""
+        a_p = a.copy()
+        q_p = q.copy()
         
-        K3 = K3_param
+        # Predictor (forward difference)
+        for i in range(1, N + 1):
+            a_p[i] = a[i] - (dt/dx)*(q[i+1] - q[i])
+            q_p[i] = q[i] - (dt/dx)*(a[i+1] - a[i]) - dt*K3*q[i]
         
-        tau_final = 2.6
-        CFL = 0.4
-        dt = CFL * dx
-        Nt = int(tau_final / dt)
-        dt = tau_final / Nt
+        apply_bc_dim(a_p, q_p)
         
-        a = np.zeros(N + 2)
-        q = np.zeros(N + 2)
+        a_new = a.copy()
+        q_new = q.copy()
         
-        def bump_dim(x_vals, center, width, amp):
-            s = (x_vals - center) / width
-            out = np.zeros_like(x_vals)
-            mask = np.abs(s) < 1
-            out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
-            return out
+        # Corrector (backward difference + averaging)
+        for i in range(1, N + 1):
+            a_new[i] = 0.5*(a[i] + a_p[i] - (dt/dx)*(q_p[i] - q_p[i-1]))
+            q_new[i] = 0.5*(q[i] + q_p[i]
+                            - (dt/dx)*(a_p[i] - a_p[i-1])
+                            - dt*K3*q_p[i])
         
-        eps = 0.020
-        a[1:-1] = bump_dim(x, center=0.7, width=eps, amp=0.10)
-        q[1:-1] = bump_dim(x, center=0.4, width=eps, amp=0.02)
+        return a_new, q_new
+    
+    apply_bc_dim(a, q)
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    a_hist = []
+    q_hist = []
+    t_hist = []
+    save_every = 50
+    tau = 0.0
+    
+    for n in range(Nt + 1):
+        if n % max(1, Nt//10) == 0:
+            progress_bar.progress(min(n / (Nt+1), 1.0))
+            status_text.text(f"⏳ Processing... {n/(Nt+1)*100:.1f}%")
         
-        def apply_bc_dim(a, q):
-            a[0] = a[1]
-            q[0] = q[1]
-            a[-1] = a[-2]
-            q[-1] = q[-2]
-        
-        def mac_cormack_dim(a, q):
-            """MacCormack predictor-corrector scheme."""
-            a_p = a.copy()
-            q_p = q.copy()
-            
-            # Predictor (forward difference)
-            for i in range(1, N + 1):
-                a_p[i] = a[i] - (dt/dx)*(q[i+1] - q[i])
-                q_p[i] = q[i] - (dt/dx)*(a[i+1] - a[i]) - dt*K3*q[i]
-            
-            apply_bc_dim(a_p, q_p)
-            
-            a_new = a.copy()
-            q_new = q.copy()
-            
-            # Corrector (backward difference + averaging)
-            for i in range(1, N + 1):
-                a_new[i] = 0.5*(a[i] + a_p[i] - (dt/dx)*(q_p[i] - q_p[i-1]))
-                q_new[i] = 0.5*(q[i] + q_p[i]
-                                - (dt/dx)*(a_p[i] - a_p[i-1])
-                                - dt*K3*q_p[i])
-            
-            return a_new, q_new
+        if n % save_every == 0:
+            a_hist.append(a[1:-1].copy())
+            q_hist.append(q[1:-1].copy())
+            t_hist.append(tau)
         
         apply_bc_dim(a, q)
-        
-        a_hist = []
-        q_hist = []
-        t_hist = []
-        save_every = 50
-        tau = 0.0
-        
-        for n in range(Nt + 1):
-            if n % max(1, Nt//10) == 0:
-                progress_bar.progress(min(n / (Nt+1), 1.0))
-                status_text.text(f"⏳ Processing... {n/(Nt+1)*100:.1f}%")
-            
-            if n % save_every == 0:
-                a_hist.append(a[1:-1].copy())
-                q_hist.append(q[1:-1].copy())
-                t_hist.append(tau)
-            
-            apply_bc_dim(a, q)
-            a, q = mac_cormack_dim(a, q)
-            tau += dt
-        
-        progress_bar.progress(1.0)
-        status_text.text("✅ Test complete!")
-        
-        st.success("Dimensionless model test completed!")
-        
-        a_hist = np.array(a_hist)
-        q_hist = np.array(q_hist)
-        t_hist = np.array(t_hist)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Damping K3", f"{K3:.6f}")
-        with col2:
-            st.metric("Grid Points", N)
-        
-        st.subheader("🎚️ Interactive Time Slider - MacCormack Scheme")
-        st.markdown("Drag the slider below to see how area (a) and flow (q) evolve over time. The graph updates dynamically as you slide.")
-        
-        # Interactive slider for time selection with unique key
-        time_idx = st.slider("Time Index", 0, len(t_hist)-1, len(t_hist)//2, key="dim_time_slider", 
-                            help="Slide to explore different time snapshots")
-        
-        # Create columns for better layout
-        col_plot, col_stats = st.columns([3, 1])
-        
-        with col_plot:
-            # Create interactive plot that updates with slider
-            fig, ax = plt.subplots(figsize=(12, 6))
-            
-            # Plot both q and a at selected time
-            ax.plot(x, q_hist[time_idx], color='tab:blue', label="q(x, τ)", linewidth=2.5, marker='o', markersize=3, alpha=0.8)
-            ax.plot(x, a_hist[time_idx], color='tab:orange', label="a(x, τ)", linewidth=2.5, marker='s', markersize=3, alpha=0.8)
-            
-            # Fixed y-limits based on all data to prevent cropping
-            ymin = min(a_hist.min(), q_hist.min())
-            ymax = max(a_hist.max(), q_hist.max())
-            padding = 0.2 * (ymax - ymin) if (ymax - ymin) > 0 else 0.1
-            ax.set_ylim(ymin - padding, ymax + padding)
-            
-            ax.set_xlabel("x (dimensionless)", fontsize=12, fontweight='bold')
-            ax.set_ylabel("Dimensionless Value", fontsize=12, fontweight='bold')
-            ax.set_title(f"MacCormack Scheme: τ = {t_hist[time_idx]:.5f}", fontsize=13, fontweight='bold')
-            ax.grid(True, alpha=0.3)
-            ax.legend(fontsize=11, loc='best')
-            
-            plt.tight_layout()
-            st.pyplot(fig, use_container_width=True)
-        
-        with col_stats:
-            st.write("### 📊 Statistics")
-            st.metric("Time τ", f"{t_hist[time_idx]:.4f}")
-            st.metric("Max a", f"{a_hist[time_idx].max():.6f}")
-            st.metric("Min a", f"{a_hist[time_idx].min():.6f}")
-            st.metric("Max q", f"{q_hist[time_idx].max():.6f}")
-            st.metric("Min q", f"{q_hist[time_idx].min():.6f}")
-            st.metric("Mean a", f"{a_hist[time_idx].mean():.6f}")
-            st.metric("Mean q", f"{q_hist[time_idx].mean():.6f}")
-        
-        # Spatio-temporal contour plots
-        st.subheader("📈 Full Spatio-Temporal Evolution")
-        st.markdown("Watch how the disturbances propagate and dissipate over space and time.")
-        
-        fig2, axes2 = plt.subplots(2, 1, figsize=(12, 10))
-        
-        im0 = axes2[0].contourf(x, t_hist, a_hist, levels=20, cmap='RdYlBu_r')
-        # Add vertical line showing selected time
-        axes2[0].axhline(y=t_hist[time_idx], color='green', linestyle='--', linewidth=2, label=f'Selected time: τ={t_hist[time_idx]:.4f}')
-        axes2[0].set_ylabel('Time τ', fontweight='bold', fontsize=11)
-        axes2[0].set_title('Area (a) Spatio-Temporal Evolution - Dimensionless (MacCormack)', fontweight='bold', fontsize=12)
-        cbar0 = plt.colorbar(im0, ax=axes2[0], label='a')
-        axes2[0].legend(loc='upper right')
-        
-        im1 = axes2[1].contourf(x, t_hist, q_hist, levels=20, cmap='viridis')
-        # Add vertical line showing selected time
-        axes2[1].axhline(y=t_hist[time_idx], color='lime', linestyle='--', linewidth=2, label=f'Selected time: τ={t_hist[time_idx]:.4f}')
-        axes2[1].set_xlabel('Position x', fontweight='bold', fontsize=11)
-        axes2[1].set_ylabel('Time τ', fontweight='bold', fontsize=11)
-        axes2[1].set_title('Flow (q) Spatio-Temporal Evolution - Dimensionless (MacCormack)', fontweight='bold', fontsize=12)
-        cbar1 = plt.colorbar(im1, ax=axes2[1], label='q')
-        axes2[1].legend(loc='upper right')
-        
-        plt.tight_layout()
-        st.pyplot(fig2, use_container_width=True)
+        a, q = mac_cormack_dim(a, q)
+        tau += dt
+    
+    progress_bar.progress(1.0)
+    status_text.text("✅ Test complete!")
+    
+    st.success("Dimensionless model test completed!")
+    
+    a_hist = np.array(a_hist)
+    q_hist = np.array(q_hist)
+    t_hist = np.array(t_hist)
+    
+    # Display results as static plots
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Damping K3", f"{K3:.6f}")
+    with col2:
+        st.metric("Grid Points", N)
+    
+    # Final time snapshot
+    st.subheader("📊 Final Time Snapshot (τ = {:.4f})".format(t_hist[-1]))
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.plot(x, q_hist[-1], color='tab:blue', label="q(x, τ)", linewidth=2.5)
+    ax.plot(x, a_hist[-1], color='tab:orange', label="a(x, τ)", linewidth=2.5)
+    ax.set_xlabel("x (dimensionless)", fontsize=12, fontweight='bold')
+    ax.set_ylabel("Dimensionless Value", fontsize=12, fontweight='bold')
+    ax.set_title("MacCormack Scheme: Final Time", fontsize=13, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=11)
+    plt.tight_layout()
+    st.pyplot(fig, use_container_width=True)
+    
+    # Spatio-temporal contour plots
+    st.subheader("📈 Full Spatio-Temporal Evolution")
+    st.markdown("Complete evolution of area (a) and flow (q) over space and time.")
+    
+    fig2, axes2 = plt.subplots(2, 1, figsize=(12, 10))
+    
+    im0 = axes2[0].contourf(x, t_hist, a_hist, levels=20, cmap='RdYlBu_r')
+    axes2[0].set_ylabel('Time τ', fontweight='bold', fontsize=11)
+    axes2[0].set_title('Area (a) Spatio-Temporal Evolution - Dimensionless', fontweight='bold', fontsize=12)
+    cbar0 = plt.colorbar(im0, ax=axes2[0], label='a')
+    
+    im1 = axes2[1].contourf(x, t_hist, q_hist, levels=20, cmap='viridis')
+    axes2[1].set_xlabel('Position x', fontweight='bold', fontsize=11)
+    axes2[1].set_ylabel('Time τ', fontweight='bold', fontsize=11)
+    axes2[1].set_title('Flow (q) Spatio-Temporal Evolution - Dimensionless', fontweight='bold', fontsize=12)
+    cbar1 = plt.colorbar(im1, ax=axes2[1], label='q')
+    
+    plt.tight_layout()
+    st.pyplot(fig2, use_container_width=True)
 
 st.markdown("---")
 st.markdown("""
