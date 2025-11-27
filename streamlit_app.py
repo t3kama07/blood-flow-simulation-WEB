@@ -844,22 +844,36 @@ elif page == "🧪 Test 1-Z (Spatial)":
         snapshots_A = np.array(snapshots_A)
         snap_times = np.array(snap_times)
         
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        # Display snapshots at saved times (like original code)
+        st.subheader("📊 Snapshots at Different Times")
         
-        im0 = axes[0].contourf(z, snap_times, snapshots_Q, levels=15, cmap='RdYlBu_r')
-        axes[0].set_xlabel('Position z (m)')
-        axes[0].set_ylabel('Time (s)')
-        axes[0].set_title('Flow Q Spatial-Temporal Evolution')
-        plt.colorbar(im0, ax=axes[0])
+        for idx, t_snap in enumerate(snap_times):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fig_q, ax_q = plt.subplots(figsize=(10, 4))
+                ax_q.plot(z, snapshots_Q[idx], label="Flow Q(z,t)", linewidth=2, color='blue')
+                ax_q.plot(z, snapshots_A[idx], label="Area A(z,t)", linewidth=2, color='orange')
+                ax_q.set_xlabel('z (m)')
+                ax_q.set_ylabel('Value')
+                ax_q.set_title(f'Test problem at t = {t_snap:.2f}s')
+                ax_q.grid(True, alpha=0.3)
+                ax_q.legend()
+                plt.tight_layout()
+                st.pyplot(fig_q, use_container_width=True)
+            
+            with col2:
+                st.metric(f"Time snapshot {idx}", f"{t_snap:.2f} s", delta=f"{t_snap:.4f}")
         
-        im1 = axes[1].contourf(z, snap_times, snapshots_A, levels=15, cmap='viridis')
-        axes[1].set_xlabel('Position z (m)')
-        axes[1].set_ylabel('Time (s)')
-        axes[1].set_title('Area A Spatial-Temporal Evolution')
-        plt.colorbar(im1, ax=axes[1])
-        
-        plt.tight_layout()
-        st.pyplot(fig)
+        # Summary stats
+        st.subheader("📈 Summary")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total snapshots", len(snap_times))
+        with col2:
+            st.metric("Final time", f"{snap_times[-1]:.2f} s")
+        with col3:
+            st.metric("Spatial points", len(z))
 
 # ============================================================
 # TEST DIMENSIONLESS MODEL
