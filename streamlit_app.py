@@ -898,109 +898,87 @@ elif page == "🧪 Dimensionless Model":
     q = np.zeros(N + 2)
     
     def bump_dim(x_vals, center, width, amp):
-        s = (x_vals - center) / width
-        out = np.zeros_like(x_vals)
-        mask = np.abs(s) < 1
-        out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
-        return out
-    
-    eps = 0.020
-    a[1:-1] = bump_dim(x, center=0.7, width=eps, amp=0.10)
-    q[1:-1] = bump_dim(x, center=0.4, width=eps, amp=0.02)
-    
-    def apply_bc_dim(a, q):
-        a[0] = a[1]
-        q[0] = q[1]
-        a[-1] = a[-2]
-        q[-1] = q[-2]
-    
-    def mac_cormack_dim(a, q):
-        """MacCormack predictor-corrector scheme."""
-        a_p = a.copy()
-        q_p = q.copy()
-        
-        # Predictor (forward difference)
-        for i in range(1, N + 1):
-            a_p[i] = a[i] - (dt/dx)*(q[i+1] - q[i])
-            q_p[i] = q[i] - (dt/dx)*(a[i+1] - a[i]) - dt*K3*q[i]
-        
-        apply_bc_dim(a_p, q_p)
-        
-        a_new = a.copy()
-        q_new = q.copy()
-        
-        # Corrector (backward difference + averaging)
-        for i in range(1, N + 1):
-            a_new[i] = 0.5*(a[i] + a_p[i] - (dt/dx)*(q_p[i] - q_p[i-1]))
-            q_new[i] = 0.5*(q[i] + q_p[i]
-                            - (dt/dx)*(a_p[i] - a_p[i-1])
-                            - dt*K3*q_p[i])
-        
-        return a_new, q_new
-    
-    apply_bc_dim(a, q)
-    
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    a_hist = []
-    q_hist = []
-    t_hist = []
-    save_every = 50
-    tau = 0.0
-    
-    for n in range(Nt + 1):
-        if n % max(1, Nt//10) == 0:
-            progress_bar.progress(min(n / (Nt+1), 1.0))
-            status_text.text(f"⏳ Processing... {n/(Nt+1)*100:.1f}%")
-        
-        if n % save_every == 0:
-            a_hist.append(a[1:-1].copy())
-            q_hist.append(q[1:-1].copy())
-            t_hist.append(tau)
-        
-        apply_bc_dim(a, q)
-        a, q = mac_cormack_dim(a, q)
-        tau += dt
-    
-    progress_bar.progress(1.0)
-    status_text.text("✅ Test complete!")
-    
-    st.success("Dimensionless model test completed!")
-    
-    a_hist = np.array(a_hist)
-    q_hist = np.array(q_hist)
-    t_hist = np.array(t_hist)
-    
-    # Display static snapshots at initial, middle, and final times
-    st.subheader("📊 Snapshots at Selected Times")
-    # Show 5 evenly spaced time snapshots
-    num_snaps = 20
-    idxs = [int(i * (len(t_hist)-1) / (num_snaps-1)) for i in range(num_snaps)]
-    labels = [f"Snapshot {i+1} (τ={t_hist[idx]:.4f})" for i, idx in enumerate(idxs)]
-    for i, idx in enumerate(idxs):
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.plot(x, q_hist[idx], color='tab:blue', label="q(x, τ)", linewidth=2.5)
-        ax.plot(x, a_hist[idx], color='tab:orange', label="a(x, τ)", linewidth=2.5)
-        ax.set_xlabel("x (dimensionless)", fontsize=12, fontweight='bold')
-        ax.set_ylabel("Dimensionless Value", fontsize=12, fontweight='bold')
-        ax.set_title(labels[i], fontsize=13, fontweight='bold')
-        ax.grid(True, alpha=0.3)
-        ax.legend(fontsize=11)
-        plt.tight_layout()
-        st.pyplot(fig, use_container_width=True)
-    st.subheader("📈 Summary")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total snapshots", len(t_hist))
-    with col2:
-        st.metric("Final time", f"{t_hist[-1]:.2f}")
-    with col3:
-        st.metric("Spatial points", len(x))
+        @st.cache_data
+        def run_dim_simulation():
+            K3 = 0.0002
+            N = 400
+            dx = 1.0 / N
+            x = (np.arange(N) + 0.5) * dx
+            tau_final = 2.6
+            CFL = 0.4
+            dt = CFL * dx
+            Nt = int(tau_final / dt)
+            dt = tau_final / Nt
+            a = np.zeros(N + 2)
+            q = np.zeros(N + 2)
+            def bump_dim(x_vals, center, width, amp):
+                s = (x_vals - center) / width
+                out = np.zeros_like(x_vals)
+                mask = np.abs(s) < 1
+                out[mask] = amp * 0.5 * (1 + np.cos(np.pi * s[mask]))
+                return out
+            eps = 0.020
+            a[1:-1] = bump_dim(x, center=0.7, width=eps, amp=0.10)
+            q[1:-1] = bump_dim(x, center=0.4, width=eps, amp=0.02)
+            def apply_bc_dim(a, q):
+                a[0] = a[1]
+                q[0] = q[1]
+                a[-1] = a[-2]
+                q[-1] = q[-2]
+            def mac_cormack_dim(a, q):
+                a_p = a.copy()
+                q_p = q.copy()
+                for i in range(1, N + 1):
+                    a_p[i] = a[i] - (dt/dx)*(q[i+1] - q[i])
+                    q_p[i] = q[i] - (dt/dx)*(a[i+1] - a[i]) - dt*K3*q[i]
+                apply_bc_dim(a_p, q_p)
+                a_new = a.copy()
+                q_new = q.copy()
+                for i in range(1, N + 1):
+                    a_new[i] = 0.5*(a[i] + a_p[i] - (dt/dx)*(q_p[i] - q_p[i-1]))
+                    q_new[i] = 0.5*(q[i] + q_p[i]
+                                    - (dt/dx)*(a_p[i] - a_p[i-1])
+                                    - dt*K3*q_p[i])
+                return a_new, q_new
+            apply_bc_dim(a, q)
+            a_hist = []
+            q_hist = []
+            t_hist = []
+            save_every = 50
+            tau = 0.0
+            for n in range(Nt + 1):
+                if n % save_every == 0:
+                    a_hist.append(a[1:-1].copy())
+                    q_hist.append(q[1:-1].copy())
+                    t_hist.append(tau)
+                apply_bc_dim(a, q)
+                a, q = mac_cormack_dim(a, q)
+                tau += dt
+            a_hist = np.array(a_hist)
+            q_hist = np.array(q_hist)
+            t_hist = np.array(t_hist)
+            return a_hist, q_hist, t_hist, x
 
-st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: #666; padding: 20px;'>
-<p>Blood Flow Simulation Suite • Powered by Streamlit</p>
-</div>
-""", unsafe_allow_html=True)
+        a_hist, q_hist, t_hist, x = run_dim_simulation()
+
+        st.subheader("🎚️ Interactive Time Slider")
+        time_idx = st.slider("Time Index", 0, len(t_hist)-1, len(t_hist)//2)
+
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.plot(x, q_hist[time_idx], label="q(x, τ)", color='tab:blue')
+        ax.plot(x, a_hist[time_idx], label="a(x, τ)", color='tab:orange')
+        ax.set_xlabel("x (dimensionless)")
+        ax.set_ylabel("Dimensionless Value")
+        ax.set_title(f"Snapshot at τ = {t_hist[time_idx]:.4f}")
+        ax.grid(True)
+        ax.legend()
+        st.pyplot(fig, use_container_width=True)
+        st.subheader("📈 Summary")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total snapshots", len(t_hist))
+        with col2:
+            st.metric("Final time", f"{t_hist[-1]:.2f}")
+        with col3:
+            st.metric("Spatial points", len(x))
+        ax.plot(x, a_hist[idx], color='tab:orange', label="a(x, τ)", linewidth=2.5)
