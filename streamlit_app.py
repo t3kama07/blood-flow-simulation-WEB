@@ -160,49 +160,33 @@ elif page == "🫀 Simulation T (Time-based)":
         p = p_inlet(t)
         return A_ref + p / alpha
     
-    if run_button:
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
+    @st.cache_data
+    def run_simulation_t():
         d = 8.0 * math.pi * mu / (rho * A_ref)
-        
-        # Initialize
         A = np.full(Nzp1, A_ref)
         Q = np.zeros(Nzp1)
-        
         probe_z = np.array([0.0, 0.2*L, 0.4*L, 0.6*L, 0.8*L, L])
         probe_idx = [int(zp / dx) for zp in probe_z]
         probe_labels = [f"{zp/L:.1f}L" for zp in probe_z]
-        
         time_store = []
         p_store = [[] for _ in probe_idx]
         Q_store = [[] for _ in probe_idx]
         A_store = [[] for _ in probe_idx]
-        
-        # Time integration
         for n in range(Nt):
             t = n * dt
-            
-            if n % 10000 == 0:
-                progress_bar.progress(min(n / Nt, 1.0))
-                status_text.text(f"⏳ Processing... {n/Nt*100:.1f}%")
-            
             A[0] = A_inlet(t)
             Q[0] = Q[1]
             A[-1] = A[-2]
             Q[-1] = Q[-2]
-            
             A_star = A.copy()
             Q_star = Q.copy()
             for i in range(Nz):
                 A_star[i] = A[i] - (dt/dx) * (Q[i+1] - Q[i])
                 Q_star[i] = Q[i] - (c**2 * dt/dx) * (A[i+1] - A[i]) - d * dt * Q[i]
-            
             A_star[0] = A_inlet(t + dt)
             Q_star[0] = Q_star[1]
             A_star[-1] = A_star[-2]
             Q_star[-1] = Q_star[-2]
-            
             A_new = A.copy()
             Q_new = Q.copy()
             for i in range(1, Nzp1):
@@ -210,14 +194,12 @@ elif page == "🫀 Simulation T (Time-based)":
                 Q_new[i] = 0.5 * (Q[i] + Q_star[i]
                                   - (c**2 * dt/dx)*(A_star[i] - A_star[i-1])
                                   - d*dt*Q_star[i])
-            
             A[:] = A_new
             Q[:] = Q_new
             A[0] = A_inlet(t + dt)
             Q[0] = Q[1]
             A[-1] = A[-2]
             Q[-1] = Q[-2]
-            
             if n % 1000 == 0:
                 p = alpha * (A - A_ref)
                 time_store.append(t)
@@ -225,54 +207,56 @@ elif page == "🫀 Simulation T (Time-based)":
                     p_store[j].append(p[idx])
                     Q_store[j].append(Q[idx])
                     A_store[j].append(A[idx])
-        
-        progress_bar.progress(1.0)
-        status_text.text("✅ Simulation complete!")
-        
         time_store = np.array(time_store)
         p_store = np.array(p_store)
         Q_store = np.array(Q_store)
         A_store = np.array(A_store)
-        
+        return time_store, p_store, Q_store, A_store, probe_labels
+
+    if run_button:
+        time_store, p_store, Q_store, A_store, probe_labels = run_simulation_t()
         st.success("Simulation completed successfully!")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Wave Speed", f"{c:.3f} m/s")
-        with col2:
-            st.metric("CFL Number", f"{CFL:.3f}")
-        with col3:
-            st.metric("Grid Points", Nz)
-        
-        colors = plt.cm.viridis(np.linspace(0, 1, len(probe_idx)))
-        
+        st.subheader("🎚️ Interactive Time Slider")
+        time_idx = st.slider("Time Index", 0, len(time_store)-1, len(time_store)//2)
+        colors = plt.cm.viridis(np.linspace(0, 1, len(probe_labels)))
         fig, axes = plt.subplots(3, 1, figsize=(12, 10))
-        
         for j, lbl in enumerate(probe_labels):
             axes[0].plot(time_store, p_store[j]/133.322, color=colors[j], label=f'z={lbl}', linewidth=2)
+        axes[0].axvline(time_store[time_idx], color='red', linestyle='--', label='Selected Time')
         axes[0].set_ylabel('Pressure [mmHg]', fontsize=11, fontweight='bold')
         axes[0].legend(loc='best', ncol=3)
         axes[0].grid(True, alpha=0.3)
         axes[0].set_title('Arterial Pressure Wave Propagation', fontsize=12, fontweight='bold')
-        
         for j, lbl in enumerate(probe_labels):
             axes[1].plot(time_store, Q_store[j]*1e6, color=colors[j], label=f'z={lbl}', linewidth=2)
+        axes[1].axvline(time_store[time_idx], color='red', linestyle='--', label='Selected Time')
         axes[1].set_ylabel('Flow Rate Q [mm³/s]', fontsize=11, fontweight='bold')
         axes[1].legend(loc='best', ncol=3)
         axes[1].grid(True, alpha=0.3)
         axes[1].set_title('Blood Flow Rate', fontsize=12, fontweight='bold')
-        
         for j, lbl in enumerate(probe_labels):
             axes[2].plot(time_store, A_store[j]*1e6, color=colors[j], label=f'z={lbl}', linewidth=2)
+        axes[2].axvline(time_store[time_idx], color='red', linestyle='--', label='Selected Time')
         axes[2].set_ylabel('Cross-sectional Area [mm²]', fontsize=11, fontweight='bold')
         axes[2].set_xlabel('Time [s]', fontsize=11, fontweight='bold')
         axes[2].legend(loc='best', ncol=3)
         axes[2].grid(True, alpha=0.3)
         axes[2].set_title('Arterial Cross-sectional Area', fontsize=12, fontweight='bold')
-        
         plt.tight_layout()
         st.pyplot(fig)
-        
+        st.subheader(f"📊 Snapshot at t = {time_store[time_idx]:.4f} s")
+        fig2, axes2 = plt.subplots(3, 1, figsize=(12, 10))
+        axes2[0].bar(probe_labels, p_store[:,time_idx]/133.322, color=colors)
+        axes2[0].set_ylabel('Pressure [mmHg]')
+        axes2[0].set_title('Pressure at Probes')
+        axes2[1].bar(probe_labels, Q_store[:,time_idx]*1e6, color=colors)
+        axes2[1].set_ylabel('Flow Q [mm³/s]')
+        axes2[1].set_title('Flow at Probes')
+        axes2[2].bar(probe_labels, A_store[:,time_idx]*1e6, color=colors)
+        axes2[2].set_ylabel('Area [mm²]')
+        axes2[2].set_title('Area at Probes')
+        plt.tight_layout()
+        st.pyplot(fig2)
         st.subheader("📊 Summary Statistics")
         col1, col2, col3 = st.columns(3)
         with col1:
