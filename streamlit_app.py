@@ -488,15 +488,13 @@ elif page == "💚 Healthy Artery Model":
     with col4:
         st.metric("Young's Modulus", f"{E/1e6:.1f} MPa")
     
-    run_button = st.button("🚀 Run Healthy Model", key="run_healthy", use_container_width=True)
-    
+    # --- Simulation and caching ---
     rho = 1060.0
     mu = 3.5e-3
     r_ref = D_ref / 2.0
     A_ref = np.pi * r_ref**2
     alpha = E * h_wall / (2.0 * np.pi * r_ref**3)
     c0 = np.sqrt(alpha * A_ref / rho)
-    
     dx = 1.0e-3
     dt = 1.0e-5
     T_final = 1.0
@@ -505,7 +503,7 @@ elif page == "💚 Healthy Artery Model":
     Nt = int(T_final / dt)
     z = np.linspace(0.0, L, Nzp1)
     delta = 8.0 * np.pi * mu / (rho * A_ref)
-    
+
     def blackman_harris_h(x):
         if x < 0.0 or x > 1.0:
             return 0.0
@@ -518,7 +516,6 @@ elif page == "💚 Healthy Artery Model":
         betaP, betaD, betaT = 1.0, 0.4, 0.3
         mmHg_to_Pa = 133.322
         A_total = 50.0 * mmHg_to_Pa
-        
         xi_P = (t - tP) / LP
         xi_T = (t - tT) / LT
         xi_D = (t - tD) / LD
@@ -530,42 +527,30 @@ elif page == "💚 Healthy Artery Model":
     def A_inlet_h(t):
         p = p_inlet_h(t)
         return A_ref + p / alpha
-    
-    if run_button:
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
+
+    @st.cache_data(show_spinner=True)
+    def run_healthy_model():
         A = np.full(Nzp1, A_ref)
         Q = np.zeros(Nzp1)
-        
         time_store = []
         p_store_h = []
         Q_store_h = []
         A_store_h = []
-        
         for n in range(Nt):
             t = n * dt
-            
-            if n % 10000 == 0:
-                progress_bar.progress(min(n / Nt, 1.0))
-                status_text.text(f"⏳ Processing... {n/Nt*100:.1f}%")
-            
             A[0] = A_inlet_h(t)
             Q[0] = Q[1]
             A[-1] = A[-2]
             Q[-1] = Q[-2]
-            
             A_star = A.copy()
             Q_star = Q.copy()
             for i in range(Nz):
                 A_star[i] = A[i] - (dt/dx) * (Q[i+1] - Q[i])
                 Q_star[i] = Q[i] - (c0**2 * dt/dx) * (A[i+1] - A[i]) - delta * dt * Q[i]
-            
             A_star[0] = A_inlet_h(t + dt)
             Q_star[0] = Q_star[1]
             A_star[-1] = A_star[-2]
             Q_star[-1] = Q_star[-2]
-            
             A_new = A.copy()
             Q_new = Q.copy()
             for i in range(1, Nzp1):
@@ -573,65 +558,57 @@ elif page == "💚 Healthy Artery Model":
                 Q_new[i] = 0.5 * (Q[i] + Q_star[i]
                                   - (c0**2 * dt/dx)*(A_star[i] - A_star[i-1])
                                   - delta*dt*Q_star[i])
-            
             A[:] = A_new
             Q[:] = Q_new
             A[0] = A_inlet_h(t + dt)
             Q[0] = Q[1]
             A[-1] = A[-2]
             Q[-1] = Q[-2]
-            
             if n % 1000 == 0:
                 p = alpha * (A - A_ref)
                 time_store.append(t)
                 p_store_h.append(p.copy())
                 Q_store_h.append(Q.copy())
                 A_store_h.append(A.copy())
-        
-        progress_bar.progress(1.0)
-        status_text.text("✅ Simulation complete!")
-        
-        st.success("Healthy model simulation completed!")
-        
         time_store = np.array(time_store)
         p_store_h = np.array(p_store_h)
         Q_store_h = np.array(Q_store_h)
         A_store_h = np.array(A_store_h)
-        
+        return time_store, p_store_h, Q_store_h, A_store_h, z, h_wall, c0
+
+    st.info("Click 'Run Healthy Model' to simulate and view results.")
+    run_button = st.button("\ud83d\ude80 Run Healthy Model", key="run_healthy", use_container_width=True)
+    if run_button:
+        with st.spinner("Running Healthy Artery Model simulation..."):
+            time_store, p_store_h, Q_store_h, A_store_h, z, h_wall, c0 = run_healthy_model()
+        st.success("Healthy model simulation completed!")
+        # --- Time slider ---
+        idx = st.slider("Select time snapshot", 0, len(time_store)-1, 0, format="%d")
+        t_val = time_store[idx]
         col1, col2 = st.columns(2)
         with col1:
             st.metric("Wall Thickness", f"{h_wall*1000:.2f} mm")
         with col2:
             st.metric("Wave Speed", f"{c0:.3f} m/s")
-        
         fig, axes = plt.subplots(3, 1, figsize=(12, 10))
-        
-        for i in [0, len(time_store)//2, -1]:
-            axes[0].plot(z*1000, p_store_h[i]/133.322, label=f't={time_store[i]:.3f}s', linewidth=2, alpha=0.7)
+        axes[0].plot(z*1000, p_store_h[idx]/133.322, label=f't={t_val:.3f}s', linewidth=2, alpha=0.7)
         axes[0].set_ylabel('Pressure [mmHg]', fontweight='bold')
-        axes[0].set_title('Pressure Evolution', fontweight='bold')
-        axes[0].legend()
+        axes[0].set_title('Pressure Snapshot', fontweight='bold')
+        axes[0].legend([f't={t_val:.3f}s'])
         axes[0].grid(True, alpha=0.3)
-        
-        for i in [0, len(time_store)//2, -1]:
-            axes[1].plot(z*1000, Q_store_h[i]*1e6, label=f't={time_store[i]:.3f}s', linewidth=2, alpha=0.7)
+        axes[1].plot(z*1000, Q_store_h[idx]*1e6, label=f't={t_val:.3f}s', linewidth=2, alpha=0.7)
         axes[1].set_ylabel('Flow [mm³/s]', fontweight='bold')
-        axes[1].set_title('Flow Evolution', fontweight='bold')
-        axes[1].legend()
+        axes[1].set_title('Flow Snapshot', fontweight='bold')
+        axes[1].legend([f't={t_val:.3f}s'])
         axes[1].grid(True, alpha=0.3)
-        
-        for i in [0, len(time_store)//2, -1]:
-            axes[2].plot(z*1000, A_store_h[i]*1e6, label=f't={time_store[i]:.3f}s', linewidth=2, alpha=0.7)
+        axes[2].plot(z*1000, A_store_h[idx]*1e6, label=f't={t_val:.3f}s', linewidth=2, alpha=0.7)
         axes[2].set_ylabel('Area [mm²]', fontweight='bold')
         axes[2].set_xlabel('Position z [mm]', fontweight='bold')
-        axes[2].set_title('Area Evolution', fontweight='bold')
-        axes[2].legend()
+        axes[2].set_title('Area Snapshot', fontweight='bold')
+        axes[2].legend([f't={t_val:.3f}s'])
         axes[2].grid(True, alpha=0.3)
-        
         plt.tight_layout()
         st.pyplot(fig)
-    else:
-        st.info("👈 **Adjust parameters and click 'Run Healthy Model' to begin**")
 
 # ============================================================
 # TEST 1-T: COSINE BUMP
@@ -654,24 +631,19 @@ elif page == "🧪 Test 1-T (Cosine Bump)":
     with col3:
         st.metric("Final Time", f"{final_time:.2f} s")
     
-    run_test = st.button("🚀 Run Test 1-T", key="run_test_t", use_container_width=True)
-    
-    if run_test:
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
+    # --- Simulation and caching ---
+    @st.cache_data(show_spinner=True)
+    def run_test1_t():
         L = domain_length
         Nx = grid_points
         dz = L / Nx
         z = np.linspace(0, L, Nx+1)
-        
         Tfinal = final_time
         c = 1.0
         CFL = 0.4
         dt = CFL * dz / c
         Nt = int(Tfinal / dt) + 1
         dt = Tfinal / Nt
-        
         epsilon = 0.02
         
         def bump(z_vals, center, eps, amp=1.0):
@@ -715,6 +687,7 @@ elif page == "🧪 Test 1-T (Cosine Bump)":
             A = A_new
             t += dt
         
+        time_arr = np.array(time_arr)
         progress_bar.progress(1.0)
         status_text.text("✅ Test complete!")
         
@@ -722,7 +695,6 @@ elif page == "🧪 Test 1-T (Cosine Bump)":
         
         fig, axes = plt.subplots(2, 1, figsize=(12, 8))
         
-        time_arr = np.array(time_arr)
         for xp in track_positions:
             axes[0].plot(time_arr, Q_track[xp], label=f'z={xp}m', linewidth=2, alpha=0.7)
         axes[0].set_ylabel('Flow Q', fontweight='bold')
@@ -937,7 +909,12 @@ elif page == "🧪 Dimensionless Model":
     ax.plot(x, a_hist[time_idx], label="a(x, τ)", color='tab:orange')
     ax.set_xlabel("x (dimensionless)")
     ax.set_ylabel("Dimensionless Value")
-    ax.set_title(f"Snapshot at τ = {t_hist[time_idx]:.4f}")
+    # Set global y-limits as in original code
+    ymin = min(a_hist.min(), q_hist.min())
+    ymax = max(a_hist.max(), q_hist.max())
+    padding = 0.2 * (ymax - ymin)
+    ax.set_ylim(ymin - padding, ymax + padding)
+    ax.set_title(f"MacCormack scheme, τ = {t_hist[time_idx]:.5f}")
     ax.grid(True)
     ax.legend()
     st.pyplot(fig, use_container_width=True)
