@@ -269,7 +269,7 @@ elif page == "🫀 Simulation T (Time-based)":
             st.metric("Max Area (inlet)", f"{max(A_store[0])*1e6:.2f} mm²")
             st.metric("Min Area (inlet)", f"{min(A_store[0])*1e6:.2f} mm²")
     else:
-        st.info("👈 **Adjust parameters in the sidebar and click 'Run Simulation T' to begin**")
+        # Parameters are now static; no sidebar adjustment needed.
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Wave Speed (preview)", f"{c:.3f} m/s")
