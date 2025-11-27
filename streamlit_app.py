@@ -577,7 +577,7 @@ elif page == "💚 Healthy Artery Model":
         return time_store, p_store_h, Q_store_h, A_store_h, z, h_wall, c0
 
     st.info("Click 'Run Healthy Model' to simulate and view results.")
-    run_button = st.button("\ud83d\ude80 Run Healthy Model", key="run_healthy", use_container_width=True)
+    run_button = st.button("Run Healthy Model", key="run_healthy", use_container_width=True)
     if run_button:
         with st.spinner("Running Healthy Artery Model simulation..."):
             time_store, p_store_h, Q_store_h, A_store_h, z, h_wall, c0 = run_healthy_model()
